@@ -1,0 +1,158 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
+import { useLobbyStore } from './lobby'
+
+const mockLcu = {
+  get: vi.fn(),
+  post: vi.fn(),
+  patch: vi.fn(),
+  delete: vi.fn(),
+  getStatus: vi.fn(),
+  onConnected: vi.fn(() => vi.fn()),
+  onDisconnected: vi.fn(() => vi.fn()),
+  onEvent: vi.fn(() => vi.fn())
+}
+
+Object.defineProperty(globalThis, 'window', {
+  value: { lcu: mockLcu, settings: { get: vi.fn(), set: vi.fn() } },
+  writable: true
+})
+
+// Summoner name resolution returns gameName when present, else fetches by ID
+const MOCK_LOBBY = {
+  localMember: { summonerId: 1, summonerName: '', gameName: 'Jim3k', ready: false },
+  members: [
+    { summonerId: 1, summonerName: '', gameName: 'Jim3k', ready: false },
+    { summonerId: 2, summonerName: '', gameName: 'Ally', ready: true }
+  ],
+  gameConfig: { gameMode: 'CLASSIC', mapId: 11, queueId: 420 },
+  invitations: []
+}
+
+// Lobby where names must be resolved via summoner endpoint
+const MOCK_LOBBY_NO_NAMES = {
+  localMember: { summonerId: 1, summonerName: '', gameName: '', ready: false },
+  members: [
+    { summonerId: 1, summonerName: '', gameName: '', ready: false }
+  ],
+  gameConfig: { gameMode: 'CLASSIC', mapId: 11, queueId: 420 },
+  invitations: []
+}
+
+const MOCK_INVITATIONS = [
+  { invitationId: 'abc', state: 'Pending', timestamp: '2026-01-01', toSummonerId: 99 }
+]
+
+const MOCK_FRIENDS = [
+  { summonerId: 10, puuid: 'p1', gameName: 'Friend1', gameTag: 'EUW', name: 'friend1', availability: 'chat', displayName: 'Friend1' },
+  { summonerId: 11, puuid: 'p2', gameName: 'Friend2', gameTag: 'EUW', name: 'friend2', availability: 'offline', displayName: 'Friend2' }
+]
+
+function makeLobbyEvent(data: unknown, eventType = 'Update') {
+  return { data, eventType, uri: '/lol-lobby/v2/lobby' }
+}
+
+function makeInviteEvent(data: unknown, eventType = 'Update') {
+  return { data, eventType, uri: '/lol-lobby/v2/received-invitations' }
+}
+
+describe('useLobbyStore', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('starts with no lobby', () => {
+    const store = useLobbyStore()
+    expect(store.inLobby).toBe(false)
+    expect(store.members).toHaveLength(0)
+  })
+
+  it('loads lobby state from event (names present)', async () => {
+    const store = useLobbyStore()
+    await store.handleLobbyEvent(makeLobbyEvent(MOCK_LOBBY))
+    expect(store.inLobby).toBe(true)
+    expect(store.members).toHaveLength(2)
+    expect(store.members[0].displayName).toBe('Jim3k')
+    expect(store.members[1].displayName).toBe('Ally')
+  })
+
+  it('resolves names via summoner endpoint when missing', async () => {
+    mockLcu.get.mockResolvedValueOnce({ summonerId: 1, gameName: 'ResolvedName' })
+    const store = useLobbyStore()
+    await store.handleLobbyEvent(makeLobbyEvent(MOCK_LOBBY_NO_NAMES))
+    expect(store.members[0].displayName).toBe('ResolvedName')
+  })
+
+  it('clears lobby on Delete event', async () => {
+    const store = useLobbyStore()
+    await store.handleLobbyEvent(makeLobbyEvent(MOCK_LOBBY))
+    await store.handleLobbyEvent(makeLobbyEvent(null, 'Delete'))
+    expect(store.inLobby).toBe(false)
+  })
+
+  it('tracks received invitations', () => {
+    const store = useLobbyStore()
+    store.handleInvitationEvent(makeInviteEvent(MOCK_INVITATIONS))
+    expect(store.receivedInvitations).toHaveLength(1)
+    expect(store.receivedInvitations[0].invitationId).toBe('abc')
+  })
+
+  it('invites by summoner ID directly', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.inviteById(42)
+    expect(mockLcu.post).toHaveBeenCalledWith(
+      '/lol-lobby/v2/lobby/invitations',
+      [{ toSummonerId: 42 }]
+    )
+  })
+
+  it('sends an invite by summoner name', async () => {
+    mockLcu.get.mockResolvedValueOnce([{ summonerId: 42 }])
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.inviteByName('Ally')
+    expect(mockLcu.post).toHaveBeenCalledWith(
+      '/lol-lobby/v2/lobby/invitations',
+      [{ toSummonerId: 42 }]
+    )
+  })
+
+  it('accepts a received invitation', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    store.handleInvitationEvent(makeInviteEvent(MOCK_INVITATIONS))
+    await store.acceptInvitation('abc')
+    expect(mockLcu.post).toHaveBeenCalledWith(
+      '/lol-lobby/v2/received-invitations/abc/accept'
+    )
+  })
+
+  it('declines a received invitation', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    store.handleInvitationEvent(makeInviteEvent(MOCK_INVITATIONS))
+    await store.declineInvitation('abc')
+    expect(mockLcu.post).toHaveBeenCalledWith(
+      '/lol-lobby/v2/received-invitations/abc/decline'
+    )
+  })
+
+  it('loads friends and filters online ones', async () => {
+    mockLcu.get.mockResolvedValueOnce(MOCK_FRIENDS)
+    const store = useLobbyStore()
+    await store.loadFriends()
+    expect(store.friends).toHaveLength(2)
+    expect(store.onlineFriends).toHaveLength(1)
+    expect(store.onlineFriends[0].displayName).toBe('Friend1')
+  })
+
+  it('resets on disconnect', async () => {
+    const store = useLobbyStore()
+    await store.handleLobbyEvent(makeLobbyEvent(MOCK_LOBBY))
+    store.reset()
+    expect(store.inLobby).toBe(false)
+    expect(store.members).toHaveLength(0)
+  })
+})

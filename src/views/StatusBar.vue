@@ -1,18 +1,20 @@
 <template>
   <div class="status-bar" :class="store.status">
     <div class="traffic-light-spacer" />
-    <span class="indicator" />
-    <span v-if="store.status === 'connected' && store.summoner">
-      {{ store.summoner.gameName || store.summoner.displayName }} · Lv {{ store.summoner.summonerLevel }}
+    <span class="dot" />
+    <span class="label">
+      <template v-if="store.status === 'connected' && store.summoner">
+        <strong>{{ store.summoner.gameName || store.summoner.displayName }}</strong>
+        <span class="level">Lv {{ store.summoner.summonerLevel }}</span>
+      </template>
+      <template v-else-if="store.status === 'connected'">Connecting…</template>
+      <template v-else>Waiting for League…</template>
     </span>
-    <span v-else-if="store.status === 'connected'">Connecting…</span>
-    <span v-else>Waiting for League Client…</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useConnectionStore } from '../stores/connection'
-
 const store = useConnectionStore()
 </script>
 
@@ -20,34 +22,46 @@ const store = useConnectionStore()
 .status-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  /* full-height draggable titlebar */
-  -webkit-app-region: drag;
-  height: 40px;
+  gap: 10px;
+  height: 42px;
   padding: 0 16px;
-  font-size: 13px;
-  background: #1a1a2e;
-  color: #c8aa6e;
-  border-bottom: 1px solid #785a28;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
-/* Reserve space for macOS traffic lights (close/min/max buttons) */
 .traffic-light-spacer {
   width: 68px;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
 
-.indicator {
+.dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #5b5b5b;
+  background: var(--text-3);
   flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-bar.connected .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.status-bar.connected .indicator {
-  background: #00c851;
+.label strong { font-weight: 600; }
+
+.level {
+  font-size: 11px;
+  color: var(--text-2);
+  font-weight: 400;
 }
 </style>
