@@ -1,9 +1,7 @@
 <template>
   <div class="app">
     <StatusBar />
-
     <main class="content">
-      <!-- Match found overlay — shown on top of everything -->
       <MatchAcceptCard v-if="connection.status === 'connected'" />
 
       <template v-if="connection.status === 'disconnected'">
@@ -11,7 +9,11 @@
       </template>
 
       <template v-else-if="!mm.isActive">
-        <SettingsPanel />
+        <PartyPanel v-if="lobby.inLobby" />
+        <p v-else class="idle-connected">Not in a lobby — queue up or join a party in League.</p>
+        <div class="settings-footer">
+          <SettingsPanel />
+        </div>
       </template>
     </main>
   </div>
@@ -21,35 +23,61 @@
 import { onMounted, onUnmounted } from 'vue'
 import StatusBar from './views/StatusBar.vue'
 import MatchAcceptCard from './views/MatchAcceptCard.vue'
+import PartyPanel from './views/PartyPanel.vue'
 import SettingsPanel from './views/SettingsPanel.vue'
 import { useConnectionStore } from './stores/connection'
 import { useMatchmakingStore } from './stores/matchmaking'
+import { useLobbyStore } from './stores/lobby'
 import { LCU_EVENTS } from '../electron/lcu/endpoints'
 
 const connection = useConnectionStore()
 const mm = useMatchmakingStore()
+const lobby = useLobbyStore()
 
 let unsubConnected: (() => void) | null = null
 let unsubDisconnected: (() => void) | null = null
 let unsubEvent: (() => void) | null = null
 
 onMounted(async () => {
-  unsubConnected = window.lcu.onConnected((info) => connection.onConnected(info))
+  unsubConnected = window.lcu.onConnected((info) => {
+    connection.onConnected(info)
+    lobby.loadFriends()
+  })
+
   unsubDisconnected = window.lcu.onDisconnected(() => {
     connection.onDisconnected()
     mm.reset()
+    lobby.reset()
   })
 
   unsubEvent = window.lcu.onEvent((payload) => {
-    if (payload.eventName === LCU_EVENTS.READY_CHECK) {
-      mm.handleLcuEvent(payload.data as Parameters<typeof mm.handleLcuEvent>[0])
+    switch (payload.eventName) {
+      case LCU_EVENTS.READY_CHECK:
+        mm.handleLcuEvent(payload.data as Parameters<typeof mm.handleLcuEvent>[0])
+        break
+      case LCU_EVENTS.LOBBY:
+        lobby.handleLobbyEvent(payload.data as Parameters<typeof lobby.handleLobbyEvent>[0])
+        break
+      case LCU_EVENTS.RECEIVED_INVITATIONS:
+        lobby.handleInvitationEvent(payload.data as Parameters<typeof lobby.handleInvitationEvent>[0])
+        break
     }
   })
 
-  // Pull current state if League is already running
   const status = await window.lcu.getStatus()
   if (status.connected && status.port !== undefined) {
-    connection.onConnected({ port: status.port })
+    await connection.onConnected({ port: status.port })
+    lobby.loadFriends()
+    try {
+      const lobbyData = await window.lcu.get('/lol-lobby/v2/lobby')
+      if (lobbyData) {
+        await lobby.handleLobbyEvent({
+          data: lobbyData as Parameters<typeof lobby.handleLobbyEvent>[0]['data'],
+          eventType: 'Update',
+          uri: '/lol-lobby/v2/lobby'
+        })
+      }
+    } catch { /* no active lobby */ }
   }
 })
 
@@ -61,21 +89,6 @@ onUnmounted(() => {
 </script>
 
 <style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  background: #0a0a15;
-  color: #e0d5c5;
-  height: 100vh;
-  overflow: hidden;
-  user-select: none;
-}
-
 .app {
   display: flex;
   flex-direction: column;
@@ -87,15 +100,33 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
+  padding: 20px 20px 16px;
   gap: 16px;
   overflow-y: auto;
 }
 
 .idle {
-  color: #5b5b5b;
-  font-size: 14px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.idle-connected {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  color: var(--text-3);
+  font-size: 13px;
   text-align: center;
+  line-height: 1.6;
+}
+
+.settings-footer {
+  width: 100%;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: auto;
 }
 </style>

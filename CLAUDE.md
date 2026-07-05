@@ -96,4 +96,5 @@ src/                   # Renderer process (Vue 3)
 ## Notes for Claude
 Do not be afraid to ask questions. Always make sure the developer and you (Claude) are 100 % aligned on scope.
 Implement with TDD (Test Driven Development - Testing framework is decided by Claude Code)
-Use git as version control. Use feature branches, main should ALWAYS be a function product. 
+Use git as version control. Use feature branches, main should ALWAYS be a functional product.
+Do NOT commit or merge to main until the developer has manually tested the feature and given the go-ahead.

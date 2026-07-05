@@ -3,29 +3,23 @@
     <div v-if="mm.isActive" class="accept-card">
       <p class="title">Match Found</p>
 
-      <div class="timer-ring" :class="urgencyClass">
-        <svg viewBox="0 0 64 64" class="ring-svg">
-          <circle class="track" cx="32" cy="32" r="28" />
-          <circle
-            class="progress"
-            cx="32"
-            cy="32"
-            r="28"
-            :stroke-dashoffset="dashOffset"
-          />
+      <div class="timer-wrap" :class="urgencyClass">
+        <svg viewBox="0 0 64 64" class="ring">
+          <circle class="track" cx="32" cy="32" r="26" />
+          <circle class="arc" cx="32" cy="32" r="26" :stroke-dashoffset="dashOffset" />
         </svg>
-        <span class="timer-label">{{ mm.countdown }}</span>
+        <span class="timer-num">{{ mm.countdown }}</span>
       </div>
 
-      <div v-if="mm.playerResponse === 'Accepted'" class="response accepted">
-        Accepted ✓
+      <div v-if="mm.playerResponse === 'Accepted'" class="response-label accepted">
+        ✓ Accepted
       </div>
-      <div v-else-if="mm.playerResponse === 'Declined'" class="response declined">
-        Declined ✗
+      <div v-else-if="mm.playerResponse === 'Declined'" class="response-label declined">
+        ✗ Declined
       </div>
-      <div v-else class="actions">
-        <button class="btn accept" @click="mm.accept()">Accept</button>
-        <button class="btn decline" @click="mm.decline()">Decline</button>
+      <div v-else class="btn-row">
+        <button class="action-btn accept" @click="mm.accept()">Accept</button>
+        <button class="action-btn decline" @click="mm.decline()">Decline</button>
       </div>
     </div>
   </Transition>
@@ -37,17 +31,13 @@ import { useMatchmakingStore } from '../stores/matchmaking'
 
 const mm = useMatchmakingStore()
 
-const TOTAL = 12 // LCU ready-check window is 12 seconds
-const CIRCUMFERENCE = 2 * Math.PI * 28 // ≈ 175.9
+const TOTAL = 12
+const CIRC = 2 * Math.PI * 26  // ≈ 163.4
 
-const dashOffset = computed(() => {
-  const fraction = Math.max(0, mm.countdown) / TOTAL
-  return CIRCUMFERENCE * (1 - fraction)
-})
-
+const dashOffset = computed(() => CIRC * (1 - Math.max(0, mm.countdown) / TOTAL))
 const urgencyClass = computed(() => {
   if (mm.countdown <= 3) return 'urgent'
-  if (mm.countdown <= 6) return 'warning'
+  if (mm.countdown <= 6) return 'warn'
   return ''
 })
 </script>
@@ -58,30 +48,30 @@ const urgencyClass = computed(() => {
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  padding: 32px 24px;
-  background: #0f0f1e;
-  border: 1px solid #785a28;
-  border-radius: 8px;
+  padding: 28px 20px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   width: 100%;
-  max-width: 280px;
+  max-width: 260px;
 }
 
 .title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #c8aa6e;
-  letter-spacing: 0.05em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--text-1);
 }
 
 /* Ring timer */
-.timer-ring {
+.timer-wrap {
   position: relative;
-  width: 88px;
-  height: 88px;
+  width: 84px;
+  height: 84px;
 }
 
-.ring-svg {
+.ring {
   width: 100%;
   height: 100%;
   transform: rotate(-90deg);
@@ -89,74 +79,72 @@ const urgencyClass = computed(() => {
 
 .track {
   fill: none;
-  stroke: #1e1e3a;
+  stroke: var(--bg-4);
   stroke-width: 5;
 }
 
-.progress {
+.arc {
   fill: none;
-  stroke: #c8aa6e;
+  stroke: var(--accent);
   stroke-width: 5;
   stroke-linecap: round;
-  stroke-dasharray: 175.9;
-  transition: stroke-dashoffset 1s linear, stroke 0.3s;
+  stroke-dasharray: 163.4;
+  transition: stroke-dashoffset 1s linear, stroke 0.4s;
 }
 
-.timer-ring.warning .progress { stroke: #f0a800; }
-.timer-ring.urgent  .progress { stroke: #e84057; }
+.timer-wrap.warn  .arc { stroke: var(--amber); }
+.timer-wrap.urgent .arc { stroke: var(--red); }
 
-.timer-label {
+.timer-num {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
-  font-weight: 700;
-  color: #e0d5c5;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-1);
 }
 
 /* Buttons */
-.actions {
+.btn-row {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
 }
 
-.btn {
+.action-btn {
   flex: 1;
   padding: 10px 0;
   border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s;
   -webkit-app-region: no-drag;
+  transition: filter 0.15s, transform 0.1s;
 }
+.action-btn:active { transform: scale(0.97); }
+.action-btn.accept  { background: var(--green); color: #fff; }
+.action-btn.accept:hover  { filter: brightness(1.15); }
+.action-btn.decline { background: var(--bg-4); color: var(--red); border: 1px solid var(--red); }
+.action-btn.decline:hover { background: color-mix(in srgb, var(--red) 15%, var(--bg-4)); }
 
-.btn:active { transform: scale(0.97); }
-
-.btn.accept  { background: #1ea448; color: #fff; }
-.btn.accept:hover  { background: #25be57; }
-.btn.decline { background: #8b1a1a; color: #ffb0b0; }
-.btn.decline:hover { background: #a82020; }
-
-/* Post-response label */
-.response {
+/* Post-response */
+.response-label {
   font-size: 15px;
-  font-weight: 600;
-  padding: 8px 20px;
-  border-radius: 4px;
+  font-weight: 700;
+  padding: 8px 24px;
+  border-radius: var(--radius-sm);
 }
-.response.accepted { color: #1ea448; }
-.response.declined  { color: #e84057; }
+.response-label.accepted { color: var(--green); }
+.response-label.declined  { color: var(--red); }
 
 /* Entry animation */
-.card-enter-active { transition: all 0.25s ease-out; }
-.card-leave-active { transition: all 0.2s ease-in; }
+.card-enter-active { transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.card-leave-active { transition: all 0.18s ease-in; }
 .card-enter-from, .card-leave-to {
   opacity: 0;
-  transform: translateY(-12px) scale(0.97);
+  transform: translateY(-10px) scale(0.95);
 }
 </style>
