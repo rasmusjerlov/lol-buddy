@@ -10,5 +10,7 @@ export const IPC = {
   LCU_GET: 'lcu:get',
   LCU_POST: 'lcu:post',
   LCU_PATCH: 'lcu:patch',
-  LCU_DELETE: 'lcu:delete'
+  LCU_DELETE: 'lcu:delete',
+  SETTINGS_GET: 'settings:get',
+  SETTINGS_SET: 'settings:set'
 } as const

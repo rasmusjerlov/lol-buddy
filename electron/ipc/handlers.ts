@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { IPC } from './channels'
 import type { LcuClient } from '../lcu/lcuClient'
 import type { LcuCredentials } from '../lcu/authManager'
+import { getSetting, setSetting } from '../settings'
 
 let activeClient: LcuClient | null = null
 let activeCredentials: LcuCredentials | null = null
@@ -37,6 +38,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.LCU_DELETE, async (_event, path: string) => {
     if (!activeClient) throw new Error('LCU not connected')
     return activeClient.delete(path)
+  })
+
+  ipcMain.handle(IPC.SETTINGS_GET, (_event, key: string) => {
+    return getSetting(key as 'autoAccept')
+  })
+
+  ipcMain.handle(IPC.SETTINGS_SET, (_event, key: string, value: unknown) => {
+    setSetting(key as 'autoAccept', value as boolean)
   })
 }
 
