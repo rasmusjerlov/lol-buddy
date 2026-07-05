@@ -51,7 +51,7 @@ function startLcuWatcher(): void {
     if (event.type === 'connected') {
       lcuClient?.disconnect()
       lcuClient = new LcuClient(event.credentials)
-      setActiveClient(lcuClient)
+      setActiveClient(lcuClient, event.credentials)
       lcuClient.connectWebSocket()
 
       // Forward all LCU events to the renderer
@@ -67,7 +67,7 @@ function startLcuWatcher(): void {
     } else {
       lcuClient?.disconnect()
       lcuClient = null
-      setActiveClient(null)
+      setActiveClient(null, null)
       broadcastToRenderer(IPC.LCU_DISCONNECTED)
     }
   })

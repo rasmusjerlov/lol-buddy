@@ -6,6 +6,7 @@ export const IPC = {
   LCU_EVENT: 'lcu:event',
 
   // Renderer → Main (invoke)
+  LCU_GET_STATUS: 'lcu:get-status',
   LCU_GET: 'lcu:get',
   LCU_POST: 'lcu:post',
   LCU_PATCH: 'lcu:patch',

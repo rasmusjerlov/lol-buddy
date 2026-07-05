@@ -7,6 +7,8 @@ export type LcuEventPayload = {
 }
 
 const lcuApi = {
+  getStatus: (): Promise<{ connected: boolean; port?: number }> =>
+    ipcRenderer.invoke(IPC.LCU_GET_STATUS),
   get: <T = unknown>(path: string): Promise<T> => ipcRenderer.invoke(IPC.LCU_GET, path),
   post: <T = unknown>(path: string, body?: unknown): Promise<T> =>
     ipcRenderer.invoke(IPC.LCU_POST, path, body),

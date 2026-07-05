@@ -22,9 +22,15 @@ const connection = useConnectionStore()
 let unsubConnected: (() => void) | null = null
 let unsubDisconnected: (() => void) | null = null
 
-onMounted(() => {
+onMounted(async () => {
   unsubConnected = window.lcu.onConnected((info) => connection.onConnected(info))
   unsubDisconnected = window.lcu.onDisconnected(() => connection.onDisconnected())
+
+  // League may already be running when the app opens — pull current status immediately
+  const status = await window.lcu.getStatus()
+  if (status.connected && status.port !== undefined) {
+    connection.onConnected({ port: status.port })
+  }
 })
 
 onUnmounted(() => {
