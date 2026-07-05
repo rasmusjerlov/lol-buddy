@@ -35,11 +35,18 @@ const lcuApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('lcu', lcuApi)
+const settingsApi = {
+  get: <T>(key: string): Promise<T> => ipcRenderer.invoke(IPC.SETTINGS_GET, key),
+  set: (key: string, value: unknown): Promise<void> =>
+    ipcRenderer.invoke(IPC.SETTINGS_SET, key, value)
+}
 
-// Type declaration for the renderer
+contextBridge.exposeInMainWorld('lcu', lcuApi)
+contextBridge.exposeInMainWorld('settings', settingsApi)
+
 declare global {
   interface Window {
     lcu: typeof lcuApi
+    settings: typeof settingsApi
   }
 }
