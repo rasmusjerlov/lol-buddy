@@ -19,10 +19,13 @@ const lockfileWatcher = new LockfileWatcher()
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 380,
-    height: 600,
+    height: 620,
+    minWidth: 320,
+    minHeight: 400,
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 12, y: 12 },
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
