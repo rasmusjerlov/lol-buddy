@@ -2,13 +2,12 @@ import https from 'https'
 import WebSocket from 'ws'
 import type { LcuCredentials } from './authManager'
 
-// LCU uses a self-signed cert — disable verification only for these connections
-const INSECURE_AGENT = new https.Agent({ rejectUnauthorized: false })
-
 export type LcuEventHandler = (data: unknown) => void
 
 export class LcuClient {
   private credentials: LcuCredentials
+  // LCU uses a self-signed cert — rejectUnauthorized scoped to this agent only
+  private agent = new https.Agent({ rejectUnauthorized: false })
   private ws: WebSocket | null = null
   private subscriptions = new Map<string, Set<LcuEventHandler>>()
   private reconnectTimer: NodeJS.Timeout | null = null
@@ -19,35 +18,54 @@ export class LcuClient {
 
   // --- REST ---
 
-  async request<T = unknown>(
+  request<T = unknown>(
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown
   ): Promise<T> {
-    const url = `${this.credentials.baseUrl}${path}`
-    const headers: Record<string, string> = {
-      Authorization: `Basic ${this.credentials.basicAuth}`,
-      Accept: 'application/json'
-    }
-    if (body !== undefined) {
-      headers['Content-Type'] = 'application/json'
-    }
+    return new Promise((resolve, reject) => {
+      const url = new URL(`${this.credentials.baseUrl}${path}`)
+      const bodyStr = body !== undefined ? JSON.stringify(body) : undefined
+      const headers: Record<string, string> = {
+        Authorization: `Basic ${this.credentials.basicAuth}`,
+        Accept: 'application/json'
+      }
+      if (bodyStr !== undefined) {
+        headers['Content-Type'] = 'application/json'
+        headers['Content-Length'] = String(Buffer.byteLength(bodyStr))
+      }
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      // @ts-expect-error — Node 18+ fetch accepts dispatcher but types lag
-      agent: INSECURE_AGENT
+      const req = https.request(
+        {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname + url.search,
+          method,
+          headers,
+          agent: this.agent
+        },
+        (res) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk: Buffer) => chunks.push(chunk))
+          res.on('end', () => {
+            const text = Buffer.concat(chunks).toString('utf8')
+            if (res.statusCode && res.statusCode >= 400) {
+              reject(new Error(`LCU ${method} ${path} → ${res.statusCode}: ${text}`))
+              return
+            }
+            try {
+              resolve(text ? (JSON.parse(text) as T) : (undefined as T))
+            } catch {
+              reject(new Error(`LCU ${method} ${path} → invalid JSON: ${text}`))
+            }
+          })
+        }
+      )
+
+      req.on('error', reject)
+      if (bodyStr !== undefined) req.write(bodyStr)
+      req.end()
     })
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      throw new Error(`LCU ${method} ${path} → ${response.status}: ${text}`)
-    }
-
-    const text = await response.text()
-    return text ? (JSON.parse(text) as T) : (undefined as T)
   }
 
   get<T = unknown>(path: string): Promise<T> {
