@@ -5,6 +5,8 @@ export type ConnectionStatus = 'disconnected' | 'connected'
 
 export interface Summoner {
   displayName: string
+  gameName: string
+  tagLine: string
   summonerLevel: number
   profileIconId: number
 }

@@ -2,7 +2,7 @@
   <div class="status-bar" :class="store.status">
     <span class="indicator" />
     <span v-if="store.status === 'connected' && store.summoner">
-      {{ store.summoner.displayName }} · Lv {{ store.summoner.summonerLevel }}
+      {{ store.summoner.gameName || store.summoner.displayName }} · Lv {{ store.summoner.summonerLevel }}
     </span>
     <span v-else-if="store.status === 'connected'">Connecting to summoner…</span>
     <span v-else>Waiting for League Client…</span>
