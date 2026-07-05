@@ -62,7 +62,9 @@ src/                   # Renderer process (Vue 3)
 
 ### Key Patterns
 
-**LCU Connection flow:** League writes a `lockfile` at `<LeagueInstall>/lockfile` containing `pid:port:password:protocol`. `lockfileWatcher.ts` (using chokidar) detects creation/deletion. `authManager.ts` extracts credentials and builds `Basic riot:<password>` header + base URL `https://127.0.0.1:<port>`.
+**LCU Connection flow:** League writes a `lockfile` containing `pid:port:password:protocol` while running. `lockfileWatcher.ts` (chokidar) detects creation/deletion. `authManager.ts` extracts credentials and builds `Basic riot:<password>` header + base URL `https://127.0.0.1:<port>`.
+- macOS lockfile path: `/Applications/League of Legends.app/Contents/LoL/lockfile`
+- Windows lockfile path: `C:\Riot Games\League of Legends\lockfile`
 
 **TLS:** LCU uses a self-signed certificate. Disable strict TLS verification **only** for this specific connection — scope it narrowly in `lcuClient.ts`, not globally.
 

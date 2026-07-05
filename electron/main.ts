@@ -7,10 +7,10 @@ import { LCU_EVENTS } from './lcu/endpoints'
 import { registerIpcHandlers, setActiveClient, broadcastToRenderer } from './ipc/handlers'
 import { IPC } from './ipc/channels'
 
-// macOS: League lockfile location (adjust path as needed during dev)
+// macOS: inside the app bundle; Windows: default Riot install location
 const LOCKFILE_PATH =
   process.platform === 'darwin'
-    ? `${process.env.HOME}/Library/Application Support/League of Legends/lockfile`
+    ? '/Applications/League of Legends.app/Contents/LoL/lockfile'
     : 'C:\\Riot Games\\League of Legends\\lockfile'
 
 let lcuClient: LcuClient | null = null
