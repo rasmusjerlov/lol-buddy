@@ -11,22 +11,49 @@ const WINDOWS_FALLBACK_PATHS = [
   'D:\\Program Files\\Riot Games\\League of Legends\\lockfile',
 ]
 
+/**
+ * Try Get-Process.Path first, then WMI ExecutablePath as fallback.
+ * Uses a single PowerShell call to minimise overhead.
+ */
 function queryWindowsProcess(): Promise<string | null> {
   return new Promise((resolve) => {
-    // Get the exe path directly — LeagueClient.exe lives in the same dir as the lockfile.
-    // Using Get-Process .Path is more reliable than parsing CommandLine args.
+    // Two independent methods in one script; first non-empty result wins.
+    const script =
+      '$p=(Get-Process -Name LeagueClient -EA SilentlyContinue|Select-Object -First 1).Path;' +
+      'if(!$p){$p=(Get-CimInstance Win32_Process -Filter "name=\'LeagueClient.exe\'" -EA SilentlyContinue|Select-Object -First 1).ExecutablePath};' +
+      '$p'
+
     execFile(
       'powershell',
-      [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        "(Get-Process -Name LeagueClient -ErrorAction SilentlyContinue | Select-Object -First 1).Path"
-      ],
+      ['-NoProfile', '-NonInteractive', '-Command', script],
       { encoding: 'utf8', timeout: 8000, windowsHide: true },
       (_err, stdout) => {
         const exePath = (stdout ?? '').trim()
         resolve(exePath ? join(dirname(exePath), 'lockfile') : null)
+      }
+    )
+  })
+}
+
+/**
+ * Read the League install directory from the Windows registry.
+ * Riot writes this during installation — works even before League starts.
+ */
+function queryRegistry(): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile(
+      'reg',
+      [
+        'query',
+        'HKLM\\SOFTWARE\\WOW6432Node\\Riot Games, Inc\\League of Legends',
+        '/v',
+        'Install Dir'
+      ],
+      { encoding: 'utf8', timeout: 5000, windowsHide: true },
+      (_err, stdout) => {
+        const match = (stdout ?? '').match(/Install Dir\s+REG_SZ\s+(.+)/)
+        const installDir = match?.[1]?.trim() ?? null
+        resolve(installDir ? join(installDir, 'lockfile') : null)
       }
     )
   })
@@ -38,7 +65,7 @@ async function checkFallbackPaths(): Promise<string | null> {
       await access(p)
       return p
     } catch {
-      // not found at this path
+      // not at this path
     }
   }
   return null
@@ -46,15 +73,19 @@ async function checkFallbackPaths(): Promise<string | null> {
 
 /**
  * Returns the lockfile path to watch.
- * - macOS: fixed well-known path (always returned; watcher handles detection)
- * - Windows: read LeagueClient.exe's path from the running process;
- *   fall back to common install paths if League isn't running yet.
+ * - macOS: fixed well-known path (watcher handles detection)
+ * - Windows: tries process query → registry → common install paths
  */
 export async function findLeagueLockfilePath(): Promise<string | null> {
   if (process.platform !== 'win32') {
     return MACOS_PATH
   }
+
   const fromProcess = await queryWindowsProcess()
   if (fromProcess) return fromProcess
+
+  const fromRegistry = await queryRegistry()
+  if (fromRegistry) return fromRegistry
+
   return checkFallbackPaths()
 }
