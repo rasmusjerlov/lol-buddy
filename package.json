@@ -1,6 +1,6 @@
 {
   "name": "league-companion",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "League of Legends companion client",
   "main": "./out/main/index.js",
   "author": "",
