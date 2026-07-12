@@ -1,5 +1,5 @@
 import { execFile } from 'child_process'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { access } from 'fs/promises'
 
 const MACOS_PATH = '/Applications/League of Legends.app/Contents/LoL/lockfile'
@@ -13,22 +13,20 @@ const WINDOWS_FALLBACK_PATHS = [
 
 function queryWindowsProcess(): Promise<string | null> {
   return new Promise((resolve) => {
-    // PowerShell CimInstance is reliable on Windows 10/11 regardless of wmic deprecation
+    // Get the exe path directly — LeagueClient.exe lives in the same dir as the lockfile.
+    // Using Get-Process .Path is more reliable than parsing CommandLine args.
     execFile(
       'powershell',
       [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        "(Get-CimInstance Win32_Process -Filter \"name='LeagueClient.exe'\").CommandLine"
+        "(Get-Process -Name LeagueClient -ErrorAction SilentlyContinue | Select-Object -First 1).Path"
       ],
       { encoding: 'utf8', timeout: 8000, windowsHide: true },
       (_err, stdout) => {
-        // Command line looks like: "...\LeagueClient.exe" --install-dir="C:\Riot Games\League of Legends" ...
-        const quoted = (stdout ?? '').match(/--install-dir="([^"]+)"/)
-        const unquoted = (stdout ?? '').match(/--install-dir=([^\s"]+)/)
-        const installDir = quoted?.[1] ?? unquoted?.[1] ?? null
-        resolve(installDir ? join(installDir, 'lockfile') : null)
+        const exePath = (stdout ?? '').trim()
+        resolve(exePath ? join(dirname(exePath), 'lockfile') : null)
       }
     )
   })
@@ -49,8 +47,8 @@ async function checkFallbackPaths(): Promise<string | null> {
 /**
  * Returns the lockfile path to watch.
  * - macOS: fixed well-known path (always returned; watcher handles detection)
- * - Windows: query the running LeagueClient.exe process for its install dir;
- *   fall back to common paths if the process isn't running yet.
+ * - Windows: read LeagueClient.exe's path from the running process;
+ *   fall back to common install paths if League isn't running yet.
  */
 export async function findLeagueLockfilePath(): Promise<string | null> {
   if (process.platform !== 'win32') {
