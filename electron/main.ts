@@ -12,6 +12,7 @@ import { findLeagueLockfilePath } from './lcu/lockfileDiscovery'
 let lcuClient: LcuClient | null = null
 const lockfileWatcher = new LockfileWatcher()
 let discoveryTimer: NodeJS.Timeout | null = null
+let readyCheckHandled = false
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -101,7 +102,12 @@ function startLcuWatcher(): void {
           if (eventName === LCU_EVENTS.READY_CHECK) {
             const ev = data as { data?: { state?: string } }
             if (ev?.data?.state === 'InProgress') {
-              handleReadyCheck()
+              if (!readyCheckHandled) {
+                readyCheckHandled = true
+                handleReadyCheck()
+              }
+            } else {
+              readyCheckHandled = false
             }
           }
         })
