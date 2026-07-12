@@ -1,5 +1,6 @@
 import { watch, type FSWatcher } from 'chokidar'
 import { readFile } from 'fs/promises'
+import { dirname, basename } from 'path'
 import { parseLockfile, type LcuCredentials } from './authManager'
 
 export type LockfileEvent =
@@ -16,15 +17,26 @@ export class LockfileWatcher {
   start(lockfilePath: string): void {
     if (this.watcher) return
 
-    this.watcher = watch(lockfilePath, {
+    const dir = dirname(lockfilePath)
+    const filename = basename(lockfilePath)
+
+    // Watch the parent directory — chokidar v4 doesn't support watching
+    // a path that doesn't exist yet; the directory is always present.
+    this.watcher = watch(dir, {
       persistent: true,
-      usePolling: false,
-      ignoreInitial: false
+      ignoreInitial: false,
+      depth: 0
     })
 
-    this.watcher.on('add', () => this.onLockfileAppeared(lockfilePath))
-    this.watcher.on('change', () => this.onLockfileAppeared(lockfilePath))
-    this.watcher.on('unlink', () => this.emit({ type: 'disconnected' }))
+    this.watcher.on('add', (p) => {
+      if (basename(p) === filename) this.onLockfileAppeared(lockfilePath)
+    })
+    this.watcher.on('change', (p) => {
+      if (basename(p) === filename) this.onLockfileAppeared(lockfilePath)
+    })
+    this.watcher.on('unlink', (p) => {
+      if (basename(p) === filename) this.emit({ type: 'disconnected' })
+    })
   }
 
   stop(): void {
@@ -44,7 +56,7 @@ export class LockfileWatcher {
       const content = await readFile(path, 'utf8')
       const credentials = parseLockfile(content)
       this.emit({ type: 'connected', credentials })
-    } catch (err) {
+    } catch {
       // Lockfile disappeared between detection and read — treat as disconnect
       this.emit({ type: 'disconnected' })
     }

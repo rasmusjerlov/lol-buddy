@@ -1,23 +1,36 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { writeFile, rm } from 'fs/promises'
+import { writeFile, rm, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { LockfileWatcher } from './lockfileWatcher'
 
 const VALID_LOCKFILE = 'LeagueClient:12345:54321:testpass:https'
 
+/** Poll until predicate is true or the timeout (ms) is exceeded. */
+async function waitFor(pred: () => boolean, timeout = 2000): Promise<void> {
+  const deadline = Date.now() + timeout
+  while (!pred()) {
+    if (Date.now() > deadline) throw new Error('waitFor timed out')
+    await new Promise((r) => setTimeout(r, 50))
+  }
+}
+
 describe('LockfileWatcher', () => {
   let watcher: LockfileWatcher
+  let tmpDir: string
   let tmpPath: string
 
-  beforeEach(() => {
+  beforeEach(async () => {
     watcher = new LockfileWatcher()
-    tmpPath = join(tmpdir(), `lockfile-test-${Date.now()}`)
+    // Each test gets its own subdirectory so directory events are unambiguous
+    tmpDir = join(tmpdir(), `lockfile-test-${Date.now()}`)
+    await mkdir(tmpDir, { recursive: true })
+    tmpPath = join(tmpDir, 'lockfile')
   })
 
   afterEach(async () => {
     watcher.stop()
-    await rm(tmpPath, { force: true })
+    await rm(tmpDir, { recursive: true, force: true })
   })
 
   it('emits connected event when lockfile appears', async () => {
@@ -26,9 +39,7 @@ describe('LockfileWatcher', () => {
     watcher.start(tmpPath)
 
     await writeFile(tmpPath, VALID_LOCKFILE, 'utf8')
-
-    // Wait for chokidar to pick it up
-    await new Promise((r) => setTimeout(r, 300))
+    await waitFor(() => events.some((e) => e.type === 'connected'))
 
     const connected = events.find((e) => e.type === 'connected')
     expect(connected).toBeDefined()
@@ -45,9 +56,9 @@ describe('LockfileWatcher', () => {
     watcher.on((e) => events.push(e))
     watcher.start(tmpPath)
 
-    await new Promise((r) => setTimeout(r, 200))
+    await waitFor(() => events.some((e) => e.type === 'connected'))
     await rm(tmpPath)
-    await new Promise((r) => setTimeout(r, 300))
+    await waitFor(() => events.some((e) => e.type === 'disconnected'))
 
     expect(events.some((e) => e.type === 'disconnected')).toBe(true)
   })
@@ -59,7 +70,7 @@ describe('LockfileWatcher', () => {
 
     watcher.start(tmpPath)
     await writeFile(tmpPath, VALID_LOCKFILE, 'utf8')
-    await new Promise((r) => setTimeout(r, 300))
+    await new Promise((r) => setTimeout(r, 500))
 
     expect(listener).not.toHaveBeenCalled()
   })
