@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, Notification } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { LockfileWatcher } from './lcu/lockfileWatcher'
@@ -6,22 +6,19 @@ import { LcuClient } from './lcu/lcuClient'
 import { LCU_EVENTS } from './lcu/endpoints'
 import { registerIpcHandlers, setActiveClient, broadcastToRenderer } from './ipc/handlers'
 import { IPC } from './ipc/channels'
-
-// macOS: inside the app bundle; Windows: default Riot install location
-const LOCKFILE_PATH =
-  process.platform === 'darwin'
-    ? '/Applications/League of Legends.app/Contents/LoL/lockfile'
-    : 'C:\\Riot Games\\League of Legends\\lockfile'
+import { getSetting } from './settings'
+import { findLeagueLockfilePath } from './lcu/lockfileDiscovery'
 
 let lcuClient: LcuClient | null = null
 const lockfileWatcher = new LockfileWatcher()
+let discoveryTimer: NodeJS.Timeout | null = null
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 380,
-    height: 620,
+    height: 720,
     minWidth: 320,
-    minHeight: 400,
+    minHeight: 500,
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
@@ -49,6 +46,45 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+async function handleReadyCheck(): Promise<void> {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    win.flashFrame(true)
+  })
+
+  if (Notification.isSupported()) {
+    new Notification({
+      title: 'Match Found!',
+      body: 'A match is ready — click to open LoL Buddy.'
+    }).show()
+  }
+
+  if (getSetting('autoAccept') && lcuClient) {
+    try {
+      await lcuClient.post('/lol-matchmaking/v1/ready-check/accept')
+    } catch {
+      // Already accepted, timed out, or not in ready-check — ignore
+    }
+  }
+}
+
+async function startDiscovery(): Promise<void> {
+  if (discoveryTimer) {
+    clearTimeout(discoveryTimer)
+    discoveryTimer = null
+  }
+
+  const lockfilePath = await findLeagueLockfilePath()
+  if (lockfilePath) {
+    lockfileWatcher.start(lockfilePath)
+  } else {
+    // League not running or not installed at a known path — retry shortly
+    discoveryTimer = setTimeout(startDiscovery, 3000)
+  }
+}
+
 function startLcuWatcher(): void {
   lockfileWatcher.on(async (event) => {
     if (event.type === 'connected') {
@@ -57,25 +93,32 @@ function startLcuWatcher(): void {
       setActiveClient(lcuClient, event.credentials)
       lcuClient.connectWebSocket()
 
-      // Forward all LCU events to the renderer
       Object.values(LCU_EVENTS).forEach((eventName) => {
-        lcuClient!.subscribe(eventName, (data) => {
+        lcuClient!.subscribe(eventName, async (data) => {
           broadcastToRenderer(IPC.LCU_EVENT, { eventName, data })
+
+          if (eventName === LCU_EVENTS.READY_CHECK) {
+            const ev = data as { data?: { state?: string } }
+            if (ev?.data?.state === 'InProgress') {
+              handleReadyCheck()
+            }
+          }
         })
       })
 
-      broadcastToRenderer(IPC.LCU_CONNECTED, {
-        port: event.credentials.port
-      })
+      broadcastToRenderer(IPC.LCU_CONNECTED, { port: event.credentials.port })
     } else {
       lcuClient?.disconnect()
       lcuClient = null
       setActiveClient(null, null)
       broadcastToRenderer(IPC.LCU_DISCONNECTED)
+      // League closed — stop watcher and poll until League starts again
+      lockfileWatcher.stop()
+      startDiscovery()
     }
   })
 
-  lockfileWatcher.start(LOCKFILE_PATH)
+  startDiscovery()
 }
 
 app.whenReady().then(() => {
@@ -98,6 +141,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    if (discoveryTimer) clearTimeout(discoveryTimer)
     lcuClient?.disconnect()
     lockfileWatcher.stop()
     app.quit()
