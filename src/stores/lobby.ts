@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { useConnectionStore } from './connection'
 
 export interface LobbyMember {
   summonerId: number
+  puuid: string
   ready: boolean
   isLocalMember: boolean
   displayName: string
@@ -28,6 +30,7 @@ export interface ReceivedInvitation {
 
 interface RawMember {
   summonerId: number
+  puuid?: string
   summonerName?: string
   gameName?: string
   ready: boolean
@@ -62,7 +65,8 @@ interface SummonerInfo {
 async function resolveName(summonerId: number): Promise<string> {
   try {
     const info = await window.lcu.get<SummonerInfo>(`/lol-summoner/v1/summoners/${summonerId}`)
-    return info.gameName || info.displayName || info.summonerName || String(summonerId)
+    // Skip displayName — the LCU literally returns the string "Unknown" for Riot-ID accounts
+    return info.gameName || info.summonerName || String(summonerId)
   } catch {
     return String(summonerId)
   }
@@ -77,6 +81,10 @@ export const useLobbyStore = defineStore('lobby', () => {
   const localSummonerId = ref<number | null>(null)
   const inviteError = ref<string | null>(null)
   const friendsLoading = ref(false)
+  const inQueue = ref(false)
+  const timeInQueue = ref(0)
+
+  let queueTick: ReturnType<typeof setInterval> | null = null
 
   const inLobby = computed(() => members.value.length > 0)
   const onlineFriends = computed(() =>
@@ -93,18 +101,30 @@ export const useLobbyStore = defineStore('lobby', () => {
     gameMode.value = gameConfig.gameMode
     queueId.value = gameConfig.queueId
 
-    // Set members immediately with placeholder names, then resolve async
-    members.value = raw.map((m) => ({
-      summonerId: m.summonerId,
-      ready: m.ready,
-      isLocalMember: m.summonerId === localMember.summonerId,
-      displayName: m.gameName || m.summonerName || '…'
-    }))
+    const connectionStore = useConnectionStore()
+    const localSummoner = connectionStore.summoner
 
-    // Resolve real names from summoner endpoint (LCU omits them from lobby data)
+    members.value = raw.map((m) => {
+      const isLocal = m.summonerId === localMember.summonerId
+      let displayName: string
+      if (isLocal && localSummoner) {
+        // Use the already-resolved summoner data instead of the lobby payload,
+        // which omits gameName for Riot-ID accounts
+        displayName = localSummoner.gameName || localSummoner.displayName || '…'
+      } else {
+        displayName = m.gameName || m.summonerName || '…'
+      }
+      return { summonerId: m.summonerId, puuid: m.puuid ?? '', ready: m.ready, isLocalMember: isLocal, displayName }
+    })
+
+    // Resolve names that the lobby payload omitted
     await Promise.all(
       raw.map(async (m) => {
-        if (m.gameName || m.summonerName) return // already have a name
+        const isLocal = m.summonerId === localMember.summonerId
+        // Already resolved from connection store
+        if (isLocal && localSummoner) return
+        // Lobby already included a name
+        if (m.gameName || m.summonerName) return
         const name = await resolveName(m.summonerId)
         const entry = members.value.find((e) => e.summonerId === m.summonerId)
         if (entry) entry.displayName = name
@@ -131,6 +151,29 @@ export const useLobbyStore = defineStore('lobby', () => {
     } finally {
       friendsLoading.value = false
     }
+  }
+
+  function clearQueueState(): void {
+    inQueue.value = false
+    timeInQueue.value = 0
+    if (queueTick !== null) {
+      clearInterval(queueTick)
+      queueTick = null
+    }
+  }
+
+  async function startQueue(): Promise<void> {
+    await window.lcu.post('/lol-lobby/v2/lobby/matchmaking/search')
+    inQueue.value = true
+    timeInQueue.value = 0
+    queueTick = setInterval(() => { timeInQueue.value++ }, 1000)
+  }
+
+  async function cancelQueue(): Promise<void> {
+    try {
+      await window.lcu.delete('/lol-lobby/v2/lobby/matchmaking/search')
+    } catch { /* LCU may return an error; clear local state regardless */ }
+    clearQueueState()
   }
 
   async function inviteById(summonerId: number): Promise<void> {
@@ -179,6 +222,7 @@ export const useLobbyStore = defineStore('lobby', () => {
     receivedInvitations.value = []
     localSummonerId.value = null
     inviteError.value = null
+    clearQueueState()
   }
 
   return {
@@ -191,6 +235,8 @@ export const useLobbyStore = defineStore('lobby', () => {
     receivedInvitations,
     inviteError,
     inLobby,
+    inQueue,
+    timeInQueue,
     handleLobbyEvent,
     handleInvitationEvent,
     loadFriends,
@@ -198,6 +244,9 @@ export const useLobbyStore = defineStore('lobby', () => {
     inviteByName,
     acceptInvitation,
     declineInvitation,
+    startQueue,
+    cancelQueue,
+    clearQueueState,
     reset
   }
 })

@@ -8,7 +8,8 @@ export const LCU = {
   RECEIVED_INVITATIONS: '/lol-lobby/v2/received-invitations',
   CHAT_CONVERSATIONS: '/lol-chat/v1/conversations',
   CHAT_FRIENDS: '/lol-chat/v1/friends',
-  CHAT_ME: '/lol-chat/v1/me'
+  CHAT_ME: '/lol-chat/v1/me',
+  LOBBY_MATCHMAKING_SEARCH: '/lol-lobby/v2/lobby/matchmaking/search'
 } as const
 
 export const LCU_EVENTS = {
