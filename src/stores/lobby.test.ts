@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useLobbyStore } from './lobby'
 
@@ -60,6 +60,11 @@ describe('useLobbyStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('starts with no lobby', () => {
@@ -154,5 +159,66 @@ describe('useLobbyStore', () => {
     store.reset()
     expect(store.inLobby).toBe(false)
     expect(store.members).toHaveLength(0)
+  })
+
+  // Queue
+  it('starts not in queue', () => {
+    const store = useLobbyStore()
+    expect(store.inQueue).toBe(false)
+    expect(store.timeInQueue).toBe(0)
+  })
+
+  it('startQueue posts to the search endpoint and sets inQueue', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.startQueue()
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-lobby/v2/lobby/matchmaking/search')
+    expect(store.inQueue).toBe(true)
+  })
+
+  it('queue timer increments while searching', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.startQueue()
+    vi.advanceTimersByTime(3000)
+    expect(store.timeInQueue).toBe(3)
+  })
+
+  it('cancelQueue deletes the search endpoint and clears inQueue', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    mockLcu.delete.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.startQueue()
+    await store.cancelQueue()
+    expect(mockLcu.delete).toHaveBeenCalledWith('/lol-lobby/v2/lobby/matchmaking/search')
+    expect(store.inQueue).toBe(false)
+    expect(store.timeInQueue).toBe(0)
+  })
+
+  it('timer stops after cancel', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    mockLcu.delete.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.startQueue()
+    await store.cancelQueue()
+    vi.advanceTimersByTime(5000)
+    expect(store.timeInQueue).toBe(0)
+  })
+
+  it('clearQueueState clears inQueue and timer', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.startQueue()
+    store.clearQueueState()
+    expect(store.inQueue).toBe(false)
+    expect(store.timeInQueue).toBe(0)
+  })
+
+  it('reset clears queue state', async () => {
+    mockLcu.post.mockResolvedValueOnce(undefined)
+    const store = useLobbyStore()
+    await store.startQueue()
+    store.reset()
+    expect(store.inQueue).toBe(false)
   })
 })

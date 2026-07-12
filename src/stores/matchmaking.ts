@@ -50,7 +50,11 @@ export const useMatchmakingStore = defineStore('matchmaking', () => {
       startTick(timer)
       const autoAccept = await window.settings.get<boolean>('autoAccept')
       if (autoAccept) {
-        await accept()
+        try {
+          await accept()
+        } catch {
+          // LCU returns 500 even on successful accept — ignore
+        }
       }
     } else {
       stopTick()

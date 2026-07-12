@@ -13,6 +13,23 @@
       </div>
     </section>
 
+    <!-- Online friends -->
+    <section v-if="lobby.onlineFriends.length">
+      <h3 class="section-label">
+        Friends online
+        <span class="badge">{{ lobby.onlineFriends.length }}</span>
+      </h3>
+      <ul class="friend-list">
+        <li v-for="friend in lobby.onlineFriends" :key="friend.puuid" class="friend-row">
+          <span class="status-pip" :class="friend.availability" />
+          <span class="friend-name">{{ friend.displayName }}</span>
+          <button class="invite-btn" title="Invite" @click="lobby.inviteById(friend.summonerId)">
+            Invite
+          </button>
+        </li>
+      </ul>
+    </section>
+
     <!-- Party members -->
     <section>
       <h3 class="section-label">
@@ -34,23 +51,6 @@
       </ul>
     </section>
 
-    <!-- Online friends -->
-    <section v-if="lobby.onlineFriends.length">
-      <h3 class="section-label">
-        Friends online
-        <span class="badge">{{ lobby.onlineFriends.length }}</span>
-      </h3>
-      <ul class="friend-list">
-        <li v-for="friend in lobby.onlineFriends" :key="friend.puuid" class="friend-row">
-          <span class="status-pip" :class="friend.availability" />
-          <span class="friend-name">{{ friend.displayName }}</span>
-          <button class="invite-btn" title="Invite" @click="lobby.inviteById(friend.summonerId)">
-            Invite
-          </button>
-        </li>
-      </ul>
-    </section>
-
     <!-- Invite by name -->
     <section>
       <h3 class="section-label">Invite by name</h3>
@@ -65,6 +65,20 @@
         <button class="primary-btn" :disabled="!inviteName.trim()" @click="sendInvite">+</button>
       </div>
       <p v-if="lobby.inviteError" class="error-msg">{{ lobby.inviteError }}</p>
+    </section>
+
+    <!-- Queue -->
+    <section class="queue-section">
+      <div v-if="lobby.inQueue" class="queue-row">
+        <span class="queue-status">
+          <span class="searching-dot" />
+          Searching {{ formatTime(lobby.timeInQueue) }}
+        </span>
+        <button class="chip red" @click="lobby.cancelQueue()">Cancel</button>
+      </div>
+      <button v-else class="find-match-btn" @click="lobby.startQueue()">
+        Find Match
+      </button>
     </section>
 
   </div>
@@ -82,6 +96,12 @@ async function sendInvite(): Promise<void> {
   if (!name) return
   await lobby.inviteByName(name)
   if (!lobby.inviteError) inviteName.value = ''
+}
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
 function formatMode(mode: string): string {
@@ -289,4 +309,58 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .primary-btn:disabled { opacity: 0.35; cursor: default; }
 
 .error-msg { font-size: 12px; color: var(--red); margin-top: 2px; }
+
+/* Queue */
+.queue-section { margin-top: 4px; }
+
+.find-match-btn {
+  width: 100%;
+  padding: 11px 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 0.15s, transform 0.1s;
+}
+.find-match-btn:hover  { background: var(--accent-hi); }
+.find-match-btn:active { transform: scale(0.98); }
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-3));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.queue-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.searching-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
 </style>

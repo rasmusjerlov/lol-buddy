@@ -4,6 +4,8 @@ import { ref } from 'vue'
 export type ConnectionStatus = 'disconnected' | 'connected'
 
 export interface Summoner {
+  summonerId: number
+  puuid: string
   displayName: string
   gameName: string
   tagLine: string
