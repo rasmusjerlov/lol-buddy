@@ -12,5 +12,6 @@ export const IPC = {
   LCU_PATCH: 'lcu:patch',
   LCU_DELETE: 'lcu:delete',
   SETTINGS_GET: 'settings:get',
-  SETTINGS_SET: 'settings:set'
+  SETTINGS_SET: 'settings:set',
+  DIALOG_PICK_LEAGUE_PATH: 'dialog:pick-league-path'
 } as const

@@ -38,7 +38,9 @@ const lcuApi = {
 const settingsApi = {
   get: <T>(key: string): Promise<T> => ipcRenderer.invoke(IPC.SETTINGS_GET, key),
   set: (key: string, value: unknown): Promise<void> =>
-    ipcRenderer.invoke(IPC.SETTINGS_SET, key, value)
+    ipcRenderer.invoke(IPC.SETTINGS_SET, key, value),
+  pickLeaguePath: (): Promise<string | null> =>
+    ipcRenderer.invoke(IPC.DIALOG_PICK_LEAGUE_PATH)
 }
 
 contextBridge.exposeInMainWorld('lcu', lcuApi)

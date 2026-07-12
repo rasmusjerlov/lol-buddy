@@ -73,13 +73,13 @@ async function checkFallbackPaths(): Promise<string | null> {
 
 /**
  * Returns the lockfile path to watch.
+ * - customInstallDir: user-supplied path takes priority on all platforms
  * - macOS: fixed well-known path (watcher handles detection)
  * - Windows: tries process query → registry → common install paths
  */
-export async function findLeagueLockfilePath(): Promise<string | null> {
-  if (process.platform !== 'win32') {
-    return MACOS_PATH
-  }
+export async function findLeagueLockfilePath(customInstallDir?: string): Promise<string | null> {
+  if (customInstallDir) return join(customInstallDir, 'lockfile')
+  if (process.platform !== 'win32') return MACOS_PATH
 
   const fromProcess = await queryWindowsProcess()
   if (fromProcess) return fromProcess

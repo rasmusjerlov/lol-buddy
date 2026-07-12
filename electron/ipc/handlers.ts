@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { IPC } from './channels'
 import type { LcuClient } from '../lcu/lcuClient'
 import type { LcuCredentials } from '../lcu/authManager'
@@ -41,11 +41,21 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SETTINGS_GET, (_event, key: string) => {
-    return getSetting(key as 'autoAccept')
+    return getSetting(key as 'autoAccept' | 'leaguePath')
   })
 
   ipcMain.handle(IPC.SETTINGS_SET, (_event, key: string, value: unknown) => {
-    setSetting(key as 'autoAccept', value as boolean)
+    setSetting(key as 'autoAccept' | 'leaguePath', value as boolean & string)
+  })
+
+  ipcMain.handle(IPC.DIALOG_PICK_LEAGUE_PATH, async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Select League of Legends install folder',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
   })
 }
 

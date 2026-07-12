@@ -76,7 +76,8 @@ async function startDiscovery(): Promise<void> {
     discoveryTimer = null
   }
 
-  const lockfilePath = await findLeagueLockfilePath()
+  const customDir = getSetting('leaguePath') || undefined
+  const lockfilePath = await findLeagueLockfilePath(customDir)
   if (lockfilePath) {
     lockfileWatcher.start(lockfilePath)
   } else {

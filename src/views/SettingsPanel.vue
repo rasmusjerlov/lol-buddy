@@ -17,6 +17,19 @@
         <span class="knob" />
       </button>
     </label>
+
+    <div class="setting-row col">
+      <div class="setting-text">
+        <span class="setting-name">League install folder</span>
+        <span class="setting-hint">
+          {{ leaguePath || 'Auto-detect (not working? set manually)' }}
+        </span>
+      </div>
+      <div class="path-actions">
+        <button class="chip" @click="pickPath">Browse…</button>
+        <button v-if="leaguePath" class="chip dim" @click="clearPath">Clear</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -24,14 +37,29 @@
 import { ref, onMounted } from 'vue'
 
 const autoAccept = ref(false)
+const leaguePath = ref('')
 
 onMounted(async () => {
   autoAccept.value = await window.settings.get<boolean>('autoAccept')
+  leaguePath.value = await window.settings.get<string>('leaguePath')
 })
 
 async function toggle(): Promise<void> {
   autoAccept.value = !autoAccept.value
   await window.settings.set('autoAccept', autoAccept.value)
+}
+
+async function pickPath(): Promise<void> {
+  const picked = await window.settings.pickLeaguePath()
+  if (picked) {
+    leaguePath.value = picked
+    await window.settings.set('leaguePath', picked)
+  }
+}
+
+async function clearPath(): Promise<void> {
+  leaguePath.value = ''
+  await window.settings.set('leaguePath', '')
 }
 </script>
 
@@ -51,7 +79,13 @@ async function toggle(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  cursor: pointer;
+  cursor: default;
+}
+
+.setting-row.col {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .setting-text {
@@ -70,7 +104,23 @@ async function toggle(): Promise<void> {
   font-size: 11px;
   color: var(--text-2);
   line-height: 1.4;
+  word-break: break-all;
 }
+
+.path-actions { display: flex; gap: 6px; }
+
+.chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--bg-4);
+  background: var(--bg-3);
+  color: var(--text-1);
+  font-size: 11px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.chip:hover { background: var(--bg-4); }
+.chip.dim { color: var(--text-2); }
 
 /* Toggle */
 .toggle {

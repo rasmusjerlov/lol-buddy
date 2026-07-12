@@ -2,10 +2,12 @@ import Store from 'electron-store'
 
 interface Settings {
   autoAccept: boolean
+  leaguePath: string
 }
 
 const defaults: Settings = {
-  autoAccept: false
+  autoAccept: false,
+  leaguePath: ''
 }
 
 const store = new Store<Settings>({ defaults })
