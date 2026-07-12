@@ -13,17 +13,28 @@
       </div>
     </section>
 
-    <!-- Online friends -->
-    <section v-if="lobby.onlineFriends.length">
+    <!-- Online friends (excluding party members already shown below) -->
+    <section v-if="invitableFriends.length">
       <h3 class="section-label">
         Friends online
-        <span class="badge">{{ lobby.onlineFriends.length }}</span>
+        <span class="badge">{{ invitableFriends.length }}</span>
       </h3>
       <ul class="friend-list">
-        <li v-for="friend in lobby.onlineFriends" :key="friend.puuid" class="friend-row">
+        <li v-for="friend in invitableFriends" :key="friend.puuid" class="friend-row">
           <span class="status-pip" :class="friend.availability" />
           <span class="friend-name">{{ friend.displayName }}</span>
-          <button class="invite-btn" title="Invite" @click="lobby.inviteById(friend.summonerId)">
+          <template v-if="getInviteStatus(friend.summonerId)">
+            <span
+              class="invite-status"
+              :class="getInviteStatus(friend.summonerId)!.state.toLowerCase()"
+            >{{ stateLabel(getInviteStatus(friend.summonerId)!.state) }}</span>
+            <button
+              v-if="getInviteStatus(friend.summonerId)!.state === 'Declined'"
+              class="invite-btn"
+              @click="lobby.inviteById(friend.summonerId)"
+            >Retry</button>
+          </template>
+          <button v-else class="invite-btn" title="Invite" @click="lobby.inviteById(friend.summonerId)">
             Invite
           </button>
         </li>
@@ -44,9 +55,10 @@
           class="member-row"
           :class="{ local: member.isLocalMember }"
         >
-          <span class="member-pip" />
+          <span class="member-pip" :class="memberPipClass(member)" />
           <span class="member-name">{{ member.displayName }}</span>
           <span v-if="member.isLocalMember" class="you-badge">you</span>
+          <span v-else-if="member.availability === 'dnd'" class="member-status in-game">In Game</span>
         </li>
       </ul>
     </section>
@@ -85,11 +97,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useLobbyStore } from '../stores/lobby'
+import type { LobbyMember } from '../stores/lobby'
 
 const lobby = useLobbyStore()
 const inviteName = ref('')
+
+const memberSummonerIds = computed(() => new Set(lobby.members.map((m) => m.summonerId)))
+
+const invitableFriends = computed(() =>
+  lobby.onlineFriends.filter((f) => !memberSummonerIds.value.has(f.summonerId))
+)
+
+function getInviteStatus(summonerId: number) {
+  return lobby.sentInvitationsBySummonerId.get(summonerId) ?? null
+}
+
+function stateLabel(state: string): string {
+  const labels: Record<string, string> = {
+    Pending: 'Invited',
+    Accepted: 'Accepted',
+    Declined: 'Declined',
+    Revoked: 'Revoked',
+    Error: 'Error',
+  }
+  return labels[state] ?? state
+}
+
+function memberPipClass(member: LobbyMember): string {
+  if (member.isLocalMember) return 'local'
+  if (member.availability === 'dnd') return 'in-game'
+  if (member.availability === 'chat') return 'online'
+  if (member.availability === 'away') return 'away'
+  return ''
+}
 
 async function sendInvite(): Promise<void> {
   const name = inviteName.value.trim()
@@ -221,7 +263,10 @@ section { display: flex; flex-direction: column; gap: 8px; }
   background: var(--bg-4);
   flex-shrink: 0;
 }
-.member-row.local .member-pip { background: var(--gold); }
+.member-pip.local   { background: var(--gold); }
+.member-pip.online  { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.member-pip.away    { background: var(--amber); }
+.member-pip.in-game { background: var(--red);   box-shadow: 0 0 4px var(--red); }
 
 .you-badge {
   margin-left: auto;
@@ -231,6 +276,21 @@ section { display: flex; flex-direction: column; gap: 8px; }
   text-transform: uppercase;
   color: var(--gold);
   opacity: 0.6;
+}
+
+.member-status {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+}
+
+.member-status.in-game {
+  background: color-mix(in srgb, var(--red) 15%, transparent);
+  color: var(--red);
 }
 
 /* Friends */
@@ -273,6 +333,36 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .invite-btn:hover {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
   color: #fff;
+}
+
+/* Invite status badge (Pending / Accepted / Declined) */
+.invite-status {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+}
+
+.invite-status.pending {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+}
+
+.invite-status.accepted {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.invite-status.declined {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+}
+
+.invite-status.revoked,
+.invite-status.error {
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--text-3) 10%, transparent);
 }
 
 /* Invite input */

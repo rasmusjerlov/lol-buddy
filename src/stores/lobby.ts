@@ -8,6 +8,14 @@ export interface LobbyMember {
   ready: boolean
   isLocalMember: boolean
   displayName: string
+  availability?: string
+}
+
+export interface SentInvitation {
+  invitationId: string
+  toSummonerId: number
+  state: string
+  toDisplayName?: string
 }
 
 export interface Friend {
@@ -36,11 +44,20 @@ interface RawMember {
   ready: boolean
 }
 
+interface RawInvitation {
+  invitationId: string
+  state: string
+  timestamp?: string
+  toSummonerId: number
+  toSummonerName?: string
+  toDisplayName?: string
+}
+
 interface LobbyData {
   localMember: RawMember
   members: RawMember[]
   gameConfig: { gameMode: string; mapId: number; queueId: number }
-  invitations: unknown[]
+  invitations: RawInvitation[]
 }
 
 interface LobbyEventPayload {
@@ -78,6 +95,7 @@ export const useLobbyStore = defineStore('lobby', () => {
   const gameMode = ref<string | null>(null)
   const queueId = ref<number | null>(null)
   const receivedInvitations = ref<ReceivedInvitation[]>([])
+  const sentInvitations = ref<SentInvitation[]>([])
   const localSummonerId = ref<number | null>(null)
   const inviteError = ref<string | null>(null)
   const friendsLoading = ref(false)
@@ -90,6 +108,13 @@ export const useLobbyStore = defineStore('lobby', () => {
   const onlineFriends = computed(() =>
     friends.value.filter((f) => f.availability !== 'offline')
   )
+  const sentInvitationsBySummonerId = computed(() => {
+    const map = new Map<number, SentInvitation>()
+    for (const inv of sentInvitations.value) {
+      map.set(inv.toSummonerId, inv)
+    }
+    return map
+  })
 
   async function handleLobbyEvent(payload: LobbyEventPayload): Promise<void> {
     if (payload.eventType === 'Delete' || !payload.data) {
@@ -114,8 +139,18 @@ export const useLobbyStore = defineStore('lobby', () => {
       } else {
         displayName = m.gameName || m.summonerName || '…'
       }
-      return { summonerId: m.summonerId, puuid: m.puuid ?? '', ready: m.ready, isLocalMember: isLocal, displayName }
+      const friend = friends.value.find((f) => f.summonerId === m.summonerId)
+      return { summonerId: m.summonerId, puuid: m.puuid ?? '', ready: m.ready, isLocalMember: isLocal, displayName, availability: friend?.availability }
     })
+
+    if (Array.isArray(payload.data.invitations)) {
+      sentInvitations.value = payload.data.invitations.map((inv) => ({
+        invitationId: inv.invitationId,
+        toSummonerId: inv.toSummonerId,
+        state: inv.state,
+        toDisplayName: inv.toDisplayName || inv.toSummonerName
+      }))
+    }
 
     // Resolve names that the lobby payload omitted
     await Promise.all(
@@ -146,6 +181,11 @@ export const useLobbyStore = defineStore('lobby', () => {
         ...f,
         displayName: f.gameName || f.name || 'Unknown'
       }))
+      // Refresh availability on existing lobby members in case friends loaded after lobby event
+      members.value = members.value.map((m) => {
+        const friend = friends.value.find((f) => f.summonerId === m.summonerId)
+        return friend ? { ...m, availability: friend.availability } : m
+      })
     } catch {
       friends.value = []
     } finally {
@@ -220,6 +260,7 @@ export const useLobbyStore = defineStore('lobby', () => {
     gameMode.value = null
     queueId.value = null
     receivedInvitations.value = []
+    sentInvitations.value = []
     localSummonerId.value = null
     inviteError.value = null
     clearQueueState()
@@ -233,6 +274,8 @@ export const useLobbyStore = defineStore('lobby', () => {
     gameMode,
     queueId,
     receivedInvitations,
+    sentInvitations,
+    sentInvitationsBySummonerId,
     inviteError,
     inLobby,
     inQueue,

@@ -43,9 +43,19 @@ const MOCK_INVITATIONS = [
   { invitationId: 'abc', state: 'Pending', timestamp: '2026-01-01', toSummonerId: 99 }
 ]
 
+const MOCK_SENT_INVITATIONS = [
+  { invitationId: 'si-1', state: 'Pending', timestamp: '2026-01-01', toSummonerId: 20, toDisplayName: 'Target1' },
+  { invitationId: 'si-2', state: 'Declined', timestamp: '2026-01-01', toSummonerId: 21, toSummonerName: 'Target2' }
+]
+
 const MOCK_FRIENDS = [
   { summonerId: 10, puuid: 'p1', gameName: 'Friend1', gameTag: 'EUW', name: 'friend1', availability: 'chat', displayName: 'Friend1' },
   { summonerId: 11, puuid: 'p2', gameName: 'Friend2', gameTag: 'EUW', name: 'friend2', availability: 'offline', displayName: 'Friend2' }
+]
+
+const MOCK_FRIENDS_WITH_DND = [
+  { summonerId: 1, puuid: 'p-local', gameName: 'Jim3k', gameTag: 'EUW', name: 'jim3k', availability: 'chat', displayName: 'Jim3k' },
+  { summonerId: 2, puuid: 'p-ally', gameName: 'Ally', gameTag: 'EUW', name: 'ally', availability: 'dnd', displayName: 'Ally' }
 ]
 
 function makeLobbyEvent(data: unknown, eventType = 'Update') {
@@ -220,5 +230,60 @@ describe('useLobbyStore', () => {
     await store.startQueue()
     store.reset()
     expect(store.inQueue).toBe(false)
+  })
+
+  // Sent invitations
+  it('parses sent invitations from lobby event', async () => {
+    const store = useLobbyStore()
+    const lobbyWithInvites = { ...MOCK_LOBBY, invitations: MOCK_SENT_INVITATIONS }
+    await store.handleLobbyEvent(makeLobbyEvent(lobbyWithInvites))
+    expect(store.sentInvitations).toHaveLength(2)
+    expect(store.sentInvitations[0].state).toBe('Pending')
+    expect(store.sentInvitations[1].state).toBe('Declined')
+  })
+
+  it('sentInvitationsBySummonerId maps by summonerId', async () => {
+    const store = useLobbyStore()
+    const lobbyWithInvites = { ...MOCK_LOBBY, invitations: MOCK_SENT_INVITATIONS }
+    await store.handleLobbyEvent(makeLobbyEvent(lobbyWithInvites))
+    expect(store.sentInvitationsBySummonerId.get(20)?.state).toBe('Pending')
+    expect(store.sentInvitationsBySummonerId.get(21)?.state).toBe('Declined')
+    expect(store.sentInvitationsBySummonerId.get(99)).toBeUndefined()
+  })
+
+  it('falls back to toSummonerName for displayName when toDisplayName missing', async () => {
+    const store = useLobbyStore()
+    const lobbyWithInvites = { ...MOCK_LOBBY, invitations: MOCK_SENT_INVITATIONS }
+    await store.handleLobbyEvent(makeLobbyEvent(lobbyWithInvites))
+    expect(store.sentInvitations[1].toDisplayName).toBe('Target2')
+  })
+
+  it('reset clears sent invitations', async () => {
+    const store = useLobbyStore()
+    const lobbyWithInvites = { ...MOCK_LOBBY, invitations: MOCK_SENT_INVITATIONS }
+    await store.handleLobbyEvent(makeLobbyEvent(lobbyWithInvites))
+    store.reset()
+    expect(store.sentInvitations).toHaveLength(0)
+  })
+
+  // Member availability cross-reference
+  it('sets member availability from friends list', async () => {
+    mockLcu.get.mockResolvedValueOnce(MOCK_FRIENDS_WITH_DND)
+    const store = useLobbyStore()
+    await store.loadFriends()
+    await store.handleLobbyEvent(makeLobbyEvent(MOCK_LOBBY))
+    const ally = store.members.find((m) => m.summonerId === 2)
+    expect(ally?.availability).toBe('dnd')
+  })
+
+  it('refreshes member availability after loadFriends completes', async () => {
+    const store = useLobbyStore()
+    // Lobby loads first (no friends yet)
+    await store.handleLobbyEvent(makeLobbyEvent(MOCK_LOBBY))
+    expect(store.members.find((m) => m.summonerId === 2)?.availability).toBeUndefined()
+    // Friends load after
+    mockLcu.get.mockResolvedValueOnce(MOCK_FRIENDS_WITH_DND)
+    await store.loadFriends()
+    expect(store.members.find((m) => m.summonerId === 2)?.availability).toBe('dnd')
   })
 })
