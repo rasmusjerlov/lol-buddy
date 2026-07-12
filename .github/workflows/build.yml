@@ -8,10 +8,12 @@ jobs:
   build-windows:
     runs-on: windows-latest
     permissions:
-      contents: write   # required to create GitHub Releases
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-node@v4
         with:
@@ -27,6 +29,22 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Bump patch version
+        id: bump
+        shell: bash
+        run: |
+          npm version patch --no-git-tag-version
+          echo "version=$(node -e "console.log(require('./package.json').version)")" >> $GITHUB_OUTPUT
+
+      - name: Commit and push version bump
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }} [skip ci]"
+          git push
+
       - name: Build Windows installer
         run: npm run build:win
 
@@ -40,8 +58,8 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ github.run_number }}
-          name: "Build #${{ github.run_number }}"
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: "v${{ steps.bump.outputs.version }}"
           body: |
             Automated build from ${{ github.sha }}
 
