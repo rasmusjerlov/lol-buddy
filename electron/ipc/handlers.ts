@@ -41,11 +41,11 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SETTINGS_GET, (_event, key: string) => {
-    return getSetting(key as 'autoAccept' | 'leaguePath')
+    return getSetting(key as 'autoAccept' | 'autoAcceptDelay' | 'leaguePath')
   })
 
   ipcMain.handle(IPC.SETTINGS_SET, (_event, key: string, value: unknown) => {
-    setSetting(key as 'autoAccept' | 'leaguePath', value as boolean & string)
+    setSetting(key as 'autoAccept' | 'autoAcceptDelay' | 'leaguePath', value as boolean & number & string)
   })
 
   ipcMain.handle(IPC.DIALOG_PICK_LEAGUE_PATH, async () => {

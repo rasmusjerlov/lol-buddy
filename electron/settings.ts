@@ -2,11 +2,13 @@ import Store from 'electron-store'
 
 interface Settings {
   autoAccept: boolean
+  autoAcceptDelay: number
   leaguePath: string
 }
 
 const defaults: Settings = {
   autoAccept: false,
+  autoAcceptDelay: 0,
   leaguePath: ''
 }
 

@@ -18,6 +18,27 @@
       </button>
     </label>
 
+    <div v-if="autoAccept" class="setting-row col">
+      <div class="setting-text">
+        <span class="setting-name">Accept delay</span>
+        <span class="setting-hint">{{ autoAcceptDelay === 0 ? 'Instant' : `${autoAcceptDelay}s` }}</span>
+      </div>
+      <div class="slider-row">
+        <span class="slider-label">Instant</span>
+        <input
+          type="range"
+          min="0"
+          max="10"
+          step="1"
+          :value="autoAcceptDelay"
+          class="slider"
+          @input="onDelayInput"
+          @change="onDelayChange"
+        />
+        <span class="slider-label">10s</span>
+      </div>
+    </div>
+
     <div class="setting-row col">
       <div class="setting-text">
         <span class="setting-name">League install folder</span>
@@ -37,16 +58,30 @@
 import { ref, onMounted } from 'vue'
 
 const autoAccept = ref(false)
+const autoAcceptDelay = ref(0)
 const leaguePath = ref('')
 
 onMounted(async () => {
-  autoAccept.value = await window.settings.get<boolean>('autoAccept')
-  leaguePath.value = await window.settings.get<string>('leaguePath')
+  ;[autoAccept.value, autoAcceptDelay.value, leaguePath.value] = await Promise.all([
+    window.settings.get<boolean>('autoAccept'),
+    window.settings.get<number>('autoAcceptDelay'),
+    window.settings.get<string>('leaguePath')
+  ])
 })
 
 async function toggle(): Promise<void> {
   autoAccept.value = !autoAccept.value
   await window.settings.set('autoAccept', autoAccept.value)
+}
+
+function onDelayInput(e: Event): void {
+  autoAcceptDelay.value = Number((e.target as HTMLInputElement).value)
+}
+
+async function onDelayChange(e: Event): Promise<void> {
+  const val = Number((e.target as HTMLInputElement).value)
+  autoAcceptDelay.value = val
+  await window.settings.set('autoAcceptDelay', val)
 }
 
 async function pickPath(): Promise<void> {
@@ -108,6 +143,26 @@ async function clearPath(): Promise<void> {
 }
 
 .path-actions { display: flex; gap: 6px; }
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.slider-label {
+  font-size: 10px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.slider {
+  flex: 1;
+  accent-color: var(--accent);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
 
 .chip {
   padding: 3px 10px;

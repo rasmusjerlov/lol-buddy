@@ -13,6 +13,7 @@ let lcuClient: LcuClient | null = null
 const lockfileWatcher = new LockfileWatcher()
 let discoveryTimer: NodeJS.Timeout | null = null
 let readyCheckHandled = false
+let readyCheckTimer: NodeJS.Timeout | null = null
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -63,10 +64,20 @@ async function handleReadyCheck(): Promise<void> {
   }
 
   if (getSetting('autoAccept') && lcuClient) {
-    try {
-      await lcuClient.post('/lol-matchmaking/v1/ready-check/accept')
-    } catch {
-      // Already accepted, timed out, or not in ready-check — ignore
+    const delayMs = getSetting('autoAcceptDelay') * 1000
+    const doAccept = async (): Promise<void> => {
+      readyCheckTimer = null
+      if (!readyCheckHandled || !lcuClient) return
+      try {
+        await lcuClient.post('/lol-matchmaking/v1/ready-check/accept')
+      } catch {
+        // Already accepted, timed out, or not in ready-check — ignore
+      }
+    }
+    if (delayMs > 0) {
+      readyCheckTimer = setTimeout(doAccept, delayMs)
+    } else {
+      await doAccept()
     }
   }
 }
@@ -108,6 +119,10 @@ function startLcuWatcher(): void {
               }
             } else {
               readyCheckHandled = false
+              if (readyCheckTimer) {
+                clearTimeout(readyCheckTimer)
+                readyCheckTimer = null
+              }
             }
           }
         })

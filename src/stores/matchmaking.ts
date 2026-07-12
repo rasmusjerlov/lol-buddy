@@ -19,6 +19,7 @@ export const useMatchmakingStore = defineStore('matchmaking', () => {
   const playerResponse = ref<'None' | 'Accepted' | 'Declined'>('None')
 
   let tickInterval: ReturnType<typeof setInterval> | null = null
+  let autoAcceptTimer: ReturnType<typeof setTimeout> | null = null
 
   const isActive = computed(() => state.value === 'InProgress')
 
@@ -41,6 +42,13 @@ export const useMatchmakingStore = defineStore('matchmaking', () => {
     }
   }
 
+  function clearAutoAcceptTimer(): void {
+    if (autoAcceptTimer !== null) {
+      clearTimeout(autoAcceptTimer)
+      autoAcceptTimer = null
+    }
+  }
+
   async function handleLcuEvent(payload: ReadyCheckPayload): Promise<void> {
     const { state: newState, timer, playerResponse: response } = payload.data
     state.value = newState
@@ -48,15 +56,29 @@ export const useMatchmakingStore = defineStore('matchmaking', () => {
 
     if (newState === 'InProgress') {
       startTick(timer)
-      const autoAccept = await window.settings.get<boolean>('autoAccept')
+      const [autoAccept, delaySeconds] = await Promise.all([
+        window.settings.get<boolean>('autoAccept'),
+        window.settings.get<number>('autoAcceptDelay')
+      ])
       if (autoAccept) {
-        try {
-          await accept()
-        } catch {
-          // LCU returns 500 even on successful accept — ignore
+        clearAutoAcceptTimer()
+        const doAccept = async (): Promise<void> => {
+          autoAcceptTimer = null
+          if (state.value !== 'InProgress') return
+          try {
+            await accept()
+          } catch {
+            // LCU returns 500 even on successful accept — ignore
+          }
+        }
+        if (delaySeconds > 0) {
+          autoAcceptTimer = setTimeout(doAccept, delaySeconds * 1000)
+        } else {
+          await doAccept()
         }
       }
     } else {
+      clearAutoAcceptTimer()
       stopTick()
       countdown.value = 0
     }
@@ -75,6 +97,7 @@ export const useMatchmakingStore = defineStore('matchmaking', () => {
     playerResponse.value = 'None'
     countdown.value = 0
     stopTick()
+    clearAutoAcceptTimer()
   }
 
   return { state, countdown, playerResponse, isActive, handleLcuEvent, accept, decline, reset }

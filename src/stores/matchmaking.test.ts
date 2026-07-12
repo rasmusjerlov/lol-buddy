@@ -14,8 +14,16 @@ const mockLcu = {
 }
 
 const mockSettings = {
-  get: vi.fn().mockResolvedValue(false),
+  get: vi.fn(),
   set: vi.fn()
+}
+
+function setSettingsMock({ autoAccept = false, autoAcceptDelay = 0 } = {}): void {
+  mockSettings.get.mockImplementation((key: string) => {
+    if (key === 'autoAccept') return Promise.resolve(autoAccept)
+    if (key === 'autoAcceptDelay') return Promise.resolve(autoAcceptDelay)
+    return Promise.resolve(undefined)
+  })
 }
 
 Object.defineProperty(globalThis, 'window', {
@@ -36,7 +44,7 @@ describe('useMatchmakingStore', () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     vi.useFakeTimers()
-    mockSettings.get.mockResolvedValue(false)
+    setSettingsMock()
   })
 
   afterEach(() => {
@@ -86,8 +94,8 @@ describe('useMatchmakingStore', () => {
     expect(mockLcu.post).toHaveBeenCalledWith('/lol-matchmaking/v1/ready-check/decline')
   })
 
-  it('auto-accepts immediately when setting is enabled', async () => {
-    mockSettings.get.mockResolvedValue(true)
+  it('auto-accepts immediately when setting is enabled with no delay', async () => {
+    setSettingsMock({ autoAccept: true, autoAcceptDelay: 0 })
     mockLcu.post.mockResolvedValue(undefined)
     const store = useMatchmakingStore()
     await store.handleLcuEvent(makeReadyCheckEvent('InProgress', 10))
@@ -95,9 +103,39 @@ describe('useMatchmakingStore', () => {
   })
 
   it('does not auto-accept when setting is disabled', async () => {
-    mockSettings.get.mockResolvedValue(false)
+    setSettingsMock({ autoAccept: false })
     const store = useMatchmakingStore()
     await store.handleLcuEvent(makeReadyCheckEvent('InProgress', 10))
+    expect(mockLcu.post).not.toHaveBeenCalled()
+  })
+
+  it('auto-accepts after the configured delay', async () => {
+    setSettingsMock({ autoAccept: true, autoAcceptDelay: 5 })
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useMatchmakingStore()
+    await store.handleLcuEvent(makeReadyCheckEvent('InProgress', 10))
+    expect(mockLcu.post).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-matchmaking/v1/ready-check/accept')
+  })
+
+  it('cancels delayed auto-accept if ready-check ends before delay expires', async () => {
+    setSettingsMock({ autoAccept: true, autoAcceptDelay: 5 })
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useMatchmakingStore()
+    await store.handleLcuEvent(makeReadyCheckEvent('InProgress', 10))
+    await store.handleLcuEvent(makeReadyCheckEvent('Done', 0))
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(mockLcu.post).not.toHaveBeenCalled()
+  })
+
+  it('cancels delayed auto-accept on reset', async () => {
+    setSettingsMock({ autoAccept: true, autoAcceptDelay: 5 })
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useMatchmakingStore()
+    await store.handleLcuEvent(makeReadyCheckEvent('InProgress', 10))
+    store.reset()
+    await vi.advanceTimersByTimeAsync(5000)
     expect(mockLcu.post).not.toHaveBeenCalled()
   })
 
