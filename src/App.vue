@@ -13,11 +13,11 @@
         <p v-else class="idle-connected">Not in a lobby — queue up or join a party in League.</p>
 
         <ChatPanel v-if="chat.conversations.length > 0" />
-
-        <div class="settings-footer">
-          <SettingsPanel />
-        </div>
       </template>
+
+      <div class="settings-footer">
+        <SettingsPanel />
+      </div>
     </main>
   </div>
 </template>
