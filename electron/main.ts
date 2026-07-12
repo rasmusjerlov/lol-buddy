@@ -1,5 +1,6 @@
-import { app, BrowserWindow, shell, Notification } from 'electron'
+import { app, BrowserWindow, shell, Notification, protocol } from 'electron'
 import { join } from 'path'
+import https from 'https'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { LockfileWatcher } from './lcu/lockfileWatcher'
 import { LcuClient } from './lcu/lcuClient'
@@ -8,12 +9,22 @@ import { registerIpcHandlers, setActiveClient, broadcastToRenderer } from './ipc
 import { IPC } from './ipc/channels'
 import { getSetting } from './settings'
 import { findLeagueLockfilePath } from './lcu/lockfileDiscovery'
+import type { LcuCredentials } from './lcu/authManager'
+
+// Must be called before app.whenReady() — lets <img src="lcu://..."> work in the renderer
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'lcu',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true, stream: true }
+}])
 
 let lcuClient: LcuClient | null = null
+let lcuCredentials: LcuCredentials | null = null
 const lockfileWatcher = new LockfileWatcher()
 let discoveryTimer: NodeJS.Timeout | null = null
 let readyCheckHandled = false
 let readyCheckTimer: NodeJS.Timeout | null = null
+
+const lcuTlsAgent = new https.Agent({ rejectUnauthorized: false })
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -103,6 +114,7 @@ function startLcuWatcher(): void {
     if (event.type === 'connected') {
       lcuClient?.disconnect()
       lcuClient = new LcuClient(event.credentials)
+      lcuCredentials = event.credentials
       setActiveClient(lcuClient, event.credentials)
       lcuClient.connectWebSocket()
 
@@ -132,6 +144,7 @@ function startLcuWatcher(): void {
     } else {
       lcuClient?.disconnect()
       lcuClient = null
+      lcuCredentials = null
       setActiveClient(null, null)
       broadcastToRenderer(IPC.LCU_DISCONNECTED)
       // League closed — stop watcher and poll until League starts again
@@ -148,6 +161,36 @@ app.whenReady().then(() => {
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  // Proxy lcu:// requests to the LCU with Basic Auth + TLS bypass.
+  // The renderer uses <img src="lcu:///path"> for champion icons.
+  protocol.handle('lcu', (request) => {
+    if (!lcuCredentials) return new Response('', { status: 503 })
+    const creds = lcuCredentials
+    const url = new URL(request.url)
+    const lcuUrl = `${creds.baseUrl}${url.pathname}`
+
+    return new Promise<Response>((resolve) => {
+      const req = https.request(
+        lcuUrl,
+        { method: 'GET', headers: { Authorization: `Basic ${creds.basicAuth}` }, agent: lcuTlsAgent },
+        (res) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk: Buffer) => chunks.push(chunk))
+          res.on('end', () => {
+            const buf = Buffer.concat(chunks)
+            const contentType = (res.headers['content-type'] as string) ?? 'image/png'
+            resolve(new Response(buf, {
+              status: res.statusCode ?? 200,
+              headers: { 'Content-Type': contentType, 'Cache-Control': 'public, max-age=3600' }
+            }))
+          })
+        }
+      )
+      req.on('error', () => resolve(new Response('', { status: 503 })))
+      req.end()
+    })
   })
 
   registerIpcHandlers()

@@ -8,6 +8,10 @@
         <p class="idle">Open League of Legends to get started.</p>
       </template>
 
+      <template v-else-if="champSelect.active">
+        <ChampSelectPanel />
+      </template>
+
       <template v-else-if="!mm.isActive">
         <PartyPanel v-if="lobby.inLobby" />
         <p v-else class="idle-connected">Not in a lobby — queue up or join a party in League.</p>
@@ -28,17 +32,21 @@ import StatusBar from './views/StatusBar.vue'
 import MatchAcceptCard from './views/MatchAcceptCard.vue'
 import PartyPanel from './views/PartyPanel.vue'
 import ChatPanel from './views/ChatPanel.vue'
+import ChampSelectPanel from './views/ChampSelectPanel.vue'
 import SettingsPanel from './views/SettingsPanel.vue'
 import { useConnectionStore } from './stores/connection'
 import { useMatchmakingStore } from './stores/matchmaking'
 import { useLobbyStore } from './stores/lobby'
 import { useChatStore } from './stores/chat'
+import { useChampSelectStore } from './stores/champSelect'
+import type { ChampSelectEventPayload } from './stores/champSelect'
 import { LCU_EVENTS } from '../electron/lcu/endpoints'
 
 const connection = useConnectionStore()
 const mm = useMatchmakingStore()
 const lobby = useLobbyStore()
 const chat = useChatStore()
+const champSelect = useChampSelectStore()
 
 let unsubConnected: (() => void) | null = null
 let unsubDisconnected: (() => void) | null = null
@@ -56,6 +64,7 @@ onMounted(async () => {
     mm.reset()
     lobby.reset()
     chat.reset()
+    champSelect.reset()
   })
 
   unsubEvent = window.lcu.onEvent(async (payload) => {
@@ -73,6 +82,9 @@ onMounted(async () => {
         break
       case LCU_EVENTS.RECEIVED_INVITATIONS:
         lobby.handleInvitationEvent(payload.data as Parameters<typeof lobby.handleInvitationEvent>[0])
+        break
+      case LCU_EVENTS.CHAMP_SELECT:
+        champSelect.handleLcuEvent(payload.data as ChampSelectEventPayload)
         break
       case LCU_EVENTS.CHAT_CONVERSATIONS: {
         // Payload.data.data is the updated conversation object; lastMessage is the newest msg
@@ -106,6 +118,17 @@ onMounted(async () => {
         })
       }
     } catch { /* no active ready check */ }
+
+    try {
+      const csSession = await window.lcu.get('/lol-champ-select/v1/session')
+      if (csSession) {
+        champSelect.handleLcuEvent({
+          data: csSession as ChampSelectEventPayload['data'],
+          eventType: 'Update',
+          uri: '/lol-champ-select/v1/session'
+        })
+      }
+    } catch { /* not in champ select */ }
 
     try {
       const lobbyData = await window.lcu.get('/lol-lobby/v2/lobby')
