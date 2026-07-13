@@ -24,6 +24,8 @@ function makeSession(overrides: Partial<{
   inProgressCellId: number
   phase: string
   selectedChampId: number
+  assignedChampionId: number
+  benchChampions: Array<{ championId: number; isPriority: boolean }>
 }> = {}): ChampSelectEventPayload {
   const localCell = overrides.localPlayerCellId ?? 0
   const inProgressCell = overrides.inProgressCellId ?? localCell
@@ -42,10 +44,11 @@ function makeSession(overrides: Partial<{
           isInProgress: inProgressCell === localCell
         }
       ]],
-      myTeam: [{ cellId: localCell, championId: 0, championPickIntent: 0, assignedPosition: 'middle', summonerId: 1, puuid: 'abc' }],
+      myTeam: [{ cellId: localCell, championId: overrides.assignedChampionId ?? 0, championPickIntent: 0, assignedPosition: 'middle', summonerId: 1, puuid: 'abc' }],
       theirTeam: [],
       timer: { adjustedTimeLeftInPhase: 30000, totalTimeInPhase: 30000, phase: overrides.phase ?? 'BAN_PICK', isInfinite: false },
-      bans: { myTeamBans: [], theirTeamBans: [] }
+      bans: { myTeamBans: [], theirTeamBans: [] },
+      benchChampions: overrides.benchChampions
     }
   }
 }
@@ -174,6 +177,53 @@ describe('useChampSelectStore', () => {
     const store = useChampSelectStore()
     store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0, selectedChampId: 99 }))
     expect(store.selectedChampId).toBe(99)
+  })
+
+  it('extracts assignedChampionId from myTeam in ARAM', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, assignedChampionId: 222 }))
+    expect(store.assignedChampionId).toBe(222)
+    expect(store.selectedChampId).toBe(222)
+  })
+
+  it('extracts benchChampionIds from benchChampions', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({
+      benchChampions: [
+        { championId: 1, isPriority: false },
+        { championId: 2, isPriority: true }
+      ]
+    }))
+    expect(store.benchChampionIds).toEqual([1, 2])
+  })
+
+  it('filters out zero champion ids from bench', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({
+      benchChampions: [{ championId: 0, isPriority: false }, { championId: 55, isPriority: false }]
+    }))
+    expect(store.benchChampionIds).toEqual([55])
+  })
+
+  it('swapBenchChamp POSTs to bench/swap and updates local state', async () => {
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ assignedChampionId: 10 }))
+    await store.swapBenchChamp(99)
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/bench/swap/99')
+    expect(store.assignedChampionId).toBe(99)
+    expect(store.selectedChampId).toBe(99)
+  })
+
+  it('reset clears bench and assigned champion state', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({
+      assignedChampionId: 50,
+      benchChampions: [{ championId: 123, isPriority: false }]
+    }))
+    store.reset()
+    expect(store.assignedChampionId).toBe(0)
+    expect(store.benchChampionIds).toEqual([])
   })
 
   it('keeps champions cached across resets', async () => {

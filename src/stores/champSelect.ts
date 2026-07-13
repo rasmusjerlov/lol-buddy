@@ -31,6 +31,8 @@ export interface ChampSelectSession {
     isInfinite: boolean
   }
   bans: { myTeamBans: number[]; theirTeamBans: number[] }
+  benchChampions?: Array<{ championId: number; isPriority: boolean }>
+  benchEnabled?: boolean
 }
 
 export interface ChampionSummary {
@@ -60,6 +62,8 @@ export const useChampSelectStore = defineStore('champSelect', () => {
   const champions = ref<ChampionSummary[]>([])
   const loadingChampions = ref(false)
   const selectedChampId = ref(0)
+  const assignedChampionId = ref(0)
+  const benchChampionIds = ref<number[]>([])
 
   let tickInterval: ReturnType<typeof setInterval> | null = null
 
@@ -125,10 +129,19 @@ export const useChampSelectStore = defineStore('champSelect', () => {
       ) ??
       null
 
-    // Sync selected champ from LCU state if user hasn't made a choice yet
-    if (myAction.value?.championId && myAction.value.championId !== 0 && selectedChampId.value === 0) {
-      selectedChampId.value = myAction.value.championId
+    // Sync selected champ from LCU state if user hasn't made a choice yet.
+    // In ARAM the assigned champion lives in myTeam, not in the action.
+    const localMember = (session.myTeam ?? []).find(m => m.cellId === session.localPlayerCellId)
+    // Use || so a zero champion id (not yet assigned) falls through to the action's championId
+    const assignedId = localMember?.championId || myAction.value?.championId || 0
+    if (assignedId !== 0) {
+      assignedChampionId.value = assignedId
+      if (selectedChampId.value === 0) selectedChampId.value = assignedId
     }
+
+    benchChampionIds.value = (session.benchChampions ?? [])
+      .map(b => b.championId)
+      .filter(id => id > 0)
 
     const t = session.timer
     phase.value = t.phase
@@ -161,6 +174,17 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     }
   }
 
+  async function swapBenchChamp(championId: number): Promise<void> {
+    try {
+      await window.lcu.post(`/lol-champ-select/v1/session/bench/swap/${championId}`)
+      // Optimistically update; the LCU event will correct us if it differs
+      assignedChampionId.value = championId
+      selectedChampId.value = championId
+    } catch {
+      // Session update will sync correct state
+    }
+  }
+
   async function lockIn(): Promise<void> {
     if (!myAction.value || selectedChampId.value === 0) return
     try {
@@ -184,6 +208,8 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     theirTeam.value = []
     allBans.value = []
     selectedChampId.value = 0
+    assignedChampionId.value = 0
+    benchChampionIds.value = []
     stopTick()
     // Keep champions cached — they don't change between sessions
   }
@@ -201,10 +227,13 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     champions,
     loadingChampions,
     selectedChampId,
+    assignedChampionId,
+    benchChampionIds,
     isMyTurn,
     canLockIn,
     handleLcuEvent,
     hoverChampion,
+    swapBenchChamp,
     lockIn,
     loadChampions,
     reset
