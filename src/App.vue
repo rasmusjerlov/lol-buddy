@@ -1,6 +1,7 @@
 <template>
   <div class="app">
     <StatusBar />
+    <UpdateBanner v-if="updateInfo" :version="updateInfo.version" :url="updateInfo.url" />
     <main class="content">
       <MatchAcceptCard v-if="connection.status === 'connected'" />
 
@@ -27,8 +28,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import StatusBar from './views/StatusBar.vue'
+import UpdateBanner from './views/UpdateBanner.vue'
 import MatchAcceptCard from './views/MatchAcceptCard.vue'
 import PartyPanel from './views/PartyPanel.vue'
 import ChatPanel from './views/ChatPanel.vue'
@@ -42,6 +44,8 @@ import { useChampSelectStore } from './stores/champSelect'
 import type { ChampSelectEventPayload } from './stores/champSelect'
 import { LCU_EVENTS } from '../electron/lcu/endpoints'
 
+const updateInfo = ref<{ version: string; url: string } | null>(null)
+
 const connection = useConnectionStore()
 const mm = useMatchmakingStore()
 const lobby = useLobbyStore()
@@ -53,6 +57,8 @@ let unsubDisconnected: (() => void) | null = null
 let unsubEvent: (() => void) | null = null
 
 onMounted(async () => {
+  updateInfo.value = await window.updater.checkForUpdate()
+
   unsubConnected = window.lcu.onConnected((info) => {
     connection.onConnected(info)
     lobby.loadFriends()

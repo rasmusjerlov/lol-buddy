@@ -3,6 +3,7 @@ import { IPC } from './channels'
 import type { LcuClient } from '../lcu/lcuClient'
 import type { LcuCredentials } from '../lcu/authManager'
 import { getSetting, setSetting } from '../settings'
+import { checkForUpdate } from '../updater'
 
 let activeClient: LcuClient | null = null
 let activeCredentials: LcuCredentials | null = null
@@ -47,6 +48,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SETTINGS_SET, (_event, key: string, value: unknown) => {
     setSetting(key as 'autoAccept' | 'autoAcceptDelay' | 'leaguePath', value as boolean & number & string)
   })
+
+  ipcMain.handle(IPC.CHECK_UPDATE, () => checkForUpdate())
 
   ipcMain.handle(IPC.DIALOG_PICK_LEAGUE_PATH, async () => {
     const win = BrowserWindow.getFocusedWindow()

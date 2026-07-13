@@ -43,12 +43,19 @@ const settingsApi = {
     ipcRenderer.invoke(IPC.DIALOG_PICK_LEAGUE_PATH)
 }
 
+const updaterApi = {
+  checkForUpdate: (): Promise<{ version: string; url: string } | null> =>
+    ipcRenderer.invoke(IPC.CHECK_UPDATE)
+}
+
 contextBridge.exposeInMainWorld('lcu', lcuApi)
 contextBridge.exposeInMainWorld('settings', settingsApi)
+contextBridge.exposeInMainWorld('updater', updaterApi)
 
 declare global {
   interface Window {
     lcu: typeof lcuApi
     settings: typeof settingsApi
+    updater: typeof updaterApi
   }
 }
