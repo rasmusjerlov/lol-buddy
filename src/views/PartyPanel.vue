@@ -23,19 +23,15 @@
         <li v-for="friend in invitableFriends" :key="friend.puuid" class="friend-row">
           <span class="status-pip" :class="friend.availability" />
           <span class="friend-name">{{ friend.displayName }}</span>
-          <template v-if="getInviteStatus(friend.summonerId)">
-            <span
-              class="invite-status"
-              :class="getInviteStatus(friend.summonerId)!.state.toLowerCase()"
-            >{{ stateLabel(getInviteStatus(friend.summonerId)!.state) }}</span>
-            <button
-              v-if="getInviteStatus(friend.summonerId)!.state === 'Declined'"
-              class="invite-btn"
-              @click="lobby.inviteById(friend.summonerId)"
-            >Retry</button>
-          </template>
-          <button v-else class="invite-btn" title="Invite" @click="lobby.inviteById(friend.summonerId)">
-            Invite
+          <button
+            class="invite-btn"
+            :class="inviteBtnStateClass(friend.summonerId)"
+            :disabled="isInviteBtnDisabled(friend.summonerId)"
+            @click="handleInviteClick(friend.summonerId)"
+          >
+            <span v-if="getInviteStatus(friend.summonerId)?.state === 'Pending'" class="invite-spinner" />
+            <span class="invite-label">{{ inviteBtnLabel(friend.summonerId) }}</span>
+            <span v-if="getInviteStatus(friend.summonerId)?.state === 'Declined'" class="invite-label retry-label">Retry ↩</span>
           </button>
         </li>
       </ul>
@@ -114,15 +110,34 @@ function getInviteStatus(summonerId: number) {
   return lobby.sentInvitationsBySummonerId.get(summonerId) ?? null
 }
 
-function stateLabel(state: string): string {
+function inviteBtnStateClass(summonerId: number): string {
+  const status = getInviteStatus(summonerId)
+  return status ? status.state.toLowerCase() : ''
+}
+
+function isInviteBtnDisabled(summonerId: number): boolean {
+  const state = getInviteStatus(summonerId)?.state
+  return state === 'Pending' || state === 'Accepted'
+}
+
+function inviteBtnLabel(summonerId: number): string {
+  const status = getInviteStatus(summonerId)
+  if (!status) return 'Invite'
   const labels: Record<string, string> = {
-    Pending: 'Invited',
-    Accepted: 'Accepted',
+    Pending: 'Pending',
+    Accepted: 'Joined!',
     Declined: 'Declined',
-    Revoked: 'Revoked',
-    Error: 'Error',
+    Revoked: 'Invite',
+    Error: 'Retry',
   }
-  return labels[state] ?? state
+  return labels[status.state] ?? 'Invite'
+}
+
+function handleInviteClick(summonerId: number): void {
+  const state = getInviteStatus(summonerId)?.state
+  if (!state || state === 'Declined' || state === 'Revoked' || state === 'Error') {
+    lobby.inviteById(summonerId)
+  }
 }
 
 function memberPipClass(member: LobbyMember): string {
@@ -319,50 +334,66 @@ section { display: flex; flex-direction: column; gap: 8px; }
 .friend-name { flex: 1; color: var(--text-1); }
 
 .invite-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent-hi);
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   border-radius: var(--radius-sm);
   padding: 3px 10px;
   cursor: pointer;
   -webkit-app-region: no-drag;
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--accent-hi);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
-.invite-btn:hover {
+.invite-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
   color: #fff;
 }
+.invite-btn:disabled { cursor: default; }
 
-/* Invite status badge (Pending / Accepted / Declined) */
-.invite-status {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 3px 9px;
-  border-radius: var(--radius-sm);
-}
-
-.invite-status.pending {
+.invite-btn.pending {
   color: var(--amber);
   background: color-mix(in srgb, var(--amber) 14%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 30%, transparent);
 }
 
-.invite-status.accepted {
+.invite-btn.accepted {
   color: var(--green);
   background: color-mix(in srgb, var(--green) 14%, transparent);
+  border-color: color-mix(in srgb, var(--green) 30%, transparent);
 }
 
-.invite-status.declined {
+.invite-btn.declined {
   color: var(--red);
   background: color-mix(in srgb, var(--red) 14%, transparent);
+  border-color: color-mix(in srgb, var(--red) 30%, transparent);
+}
+.invite-btn.declined:hover {
+  background: color-mix(in srgb, var(--red) 28%, transparent);
+  color: #fff;
 }
 
-.invite-status.revoked,
-.invite-status.error {
-  color: var(--text-3);
-  background: color-mix(in srgb, var(--text-3) 10%, transparent);
+/* Swap "Declined" → "Retry ↩" text on hover */
+.retry-label { display: none; }
+.invite-btn.declined:hover .invite-label:not(.retry-label) { display: none; }
+.invite-btn.declined:hover .retry-label { display: inline; }
+
+/* Pending spinner */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.invite-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid color-mix(in srgb, var(--amber) 30%, transparent);
+  border-top-color: var(--amber);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
 }
 
 /* Invite input */
