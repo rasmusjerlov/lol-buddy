@@ -114,6 +114,9 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     const session = payload.data
     if (!session) return
 
+    // Debug: log raw session so we can inspect the actual LCU structure
+    console.debug('[champSelect] session:', JSON.stringify(session, null, 2))
+
     active.value = true
     localPlayerCellId.value = session.localPlayerCellId
 
