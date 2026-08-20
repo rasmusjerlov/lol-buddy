@@ -29,8 +29,7 @@
         >
           <div class="icon-wrap large">
             <img
-              :key="champ.squarePortraitPath"
-              :src="`lcu://${champ.squarePortraitPath}`"
+              :src="champ.iconUrl"
               :alt="champ.name"
               class="champ-icon"
               @error="onImgError"
@@ -54,8 +53,7 @@
         >
           <div class="icon-wrap large">
             <img
-              :key="assignedChampion.squarePortraitPath"
-              :src="`lcu://${assignedChampion.squarePortraitPath}`"
+              :src="assignedChampion.iconUrl"
               :alt="assignedChampion.name"
               class="champ-icon"
               @error="onImgError"
@@ -83,8 +81,7 @@
         >
           <div class="icon-wrap">
             <img
-              :key="champ.squarePortraitPath"
-              :src="`lcu://${champ.squarePortraitPath}`"
+              :src="champ.iconUrl"
               :alt="champ.name"
               class="champ-icon"
               @error="onImgError"
@@ -114,7 +111,7 @@ import { useChampSelectStore } from '../stores/champSelect'
 interface ChampDisplay {
   id: number
   name: string
-  squarePortraitPath: string
+  iconUrl: string
 }
 
 const cs = useChampSelectStore()
@@ -123,16 +120,13 @@ const timerPercent = computed(() =>
   cs.totalTime > 0 ? (cs.timeLeft / cs.totalTime) * 100 : 0
 )
 
-// Resolve by ID; fall back to a predictable LCU icon path so icons show
-// even before the champion list has loaded.
+function champIconUrl(id: number): string {
+  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${id}.png`
+}
+
 function resolveChamp(id: number): ChampDisplay {
-  return (
-    cs.champions.find(c => c.id === id) ?? {
-      id,
-      name: '',
-      squarePortraitPath: `/lol-game-data/assets/v1/champion-icons/${id}.png`
-    }
-  )
+  const champion = cs.champions.find(c => c.id === id)
+  return { id, name: champion?.name ?? '', iconUrl: champIconUrl(id) }
 }
 
 const assignedChampion = computed((): ChampDisplay | null =>
