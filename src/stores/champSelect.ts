@@ -64,12 +64,17 @@ export const useChampSelectStore = defineStore('champSelect', () => {
   const selectedChampId = ref(0)
   const assignedChampionId = ref(0)
   const benchChampionIds = ref<number[]>([])
+  const pickableChampionIds = ref<number[]>([])
+  const _myPickActions = ref<ChampSelectAction[]>([])
 
   let tickInterval: ReturnType<typeof setInterval> | null = null
 
   const isMyTurn = computed(() => myAction.value?.isInProgress === true)
 
-  const canLockIn = computed(() => isMyTurn.value && selectedChampId.value > 0)
+  // In pool mode (2+ options) the user can lock in once they've selected any champion.
+  const canLockIn = computed(() =>
+    selectedChampId.value > 0 && (isMyTurn.value || pickableChampionIds.value.length > 0)
+  )
 
   function startTick(seconds: number): void {
     stopTick()
@@ -114,26 +119,27 @@ export const useChampSelectStore = defineStore('champSelect', () => {
 
     const flatActions = session.actions.flat()
 
+    // All non-completed pick actions that belong to the local player
+    const myPicks = flatActions.filter(
+      (a) => a.actorCellId === session.localPlayerCellId && a.type === 'pick' && !a.completed
+    )
+    _myPickActions.value = myPicks
+
     // Prefer in-progress pick; fall back to any upcoming pick (for pre-selection)
     myAction.value =
-      flatActions.find(
-        (a) =>
-          a.actorCellId === session.localPlayerCellId &&
-          a.type === 'pick' &&
-          !a.completed &&
-          a.isInProgress
-      ) ??
-      flatActions.find(
-        (a) =>
-          a.actorCellId === session.localPlayerCellId && a.type === 'pick' && !a.completed
-      ) ??
-      null
+      myPicks.find((a) => a.isInProgress) ?? myPicks[0] ?? null
+
+    // Personal champion pool: when multiple pick actions each carry a pre-filled champion ID
+    // (e.g. ARAM Mayhem gives each player 2-3 options to choose from).
+    const poolIds = myPicks.map((a) => a.championId).filter((id) => id > 0)
+    pickableChampionIds.value = poolIds.length > 1 ? poolIds : []
 
     // Sync selected champ from LCU state if user hasn't made a choice yet.
     // In ARAM the assigned champion lives in myTeam, not in the action.
+    // In pool mode the action's championId is an option (not an assignment), so skip it.
     const localMember = (session.myTeam ?? []).find(m => m.cellId === session.localPlayerCellId)
-    // Use || so a zero champion id (not yet assigned) falls through to the action's championId
-    const assignedId = localMember?.championId || myAction.value?.championId || 0
+    const isPoolMode = pickableChampionIds.value.length > 1
+    const assignedId = localMember?.championId || (!isPoolMode ? myAction.value?.championId : 0) || 0
     if (assignedId !== 0) {
       assignedChampionId.value = assignedId
       if (selectedChampId.value === 0) selectedChampId.value = assignedId
@@ -164,11 +170,12 @@ export const useChampSelectStore = defineStore('champSelect', () => {
 
   async function hoverChampion(championId: number): Promise<void> {
     selectedChampId.value = championId
-    if (!myAction.value) return
+    // In pool mode find the action whose pre-filled championId matches the selection;
+    // otherwise fall back to the single active action.
+    const action = _myPickActions.value.find((a) => a.championId === championId) ?? myAction.value
+    if (!action) return
     try {
-      await window.lcu.patch(`/lol-champ-select/v1/session/actions/${myAction.value.id}`, {
-        championId
-      })
+      await window.lcu.patch(`/lol-champ-select/v1/session/actions/${action.id}`, { championId })
     } catch {
       // Action may not yet be patchable — local selection is still stored
     }
@@ -186,12 +193,14 @@ export const useChampSelectStore = defineStore('champSelect', () => {
   }
 
   async function lockIn(): Promise<void> {
-    if (!myAction.value || selectedChampId.value === 0) return
+    if (selectedChampId.value === 0) return
+    const action = _myPickActions.value.find((a) => a.championId === selectedChampId.value) ?? myAction.value
+    if (!action) return
     try {
-      await window.lcu.patch(`/lol-champ-select/v1/session/actions/${myAction.value.id}`, {
+      await window.lcu.patch(`/lol-champ-select/v1/session/actions/${action.id}`, {
         championId: selectedChampId.value
       })
-      await window.lcu.post(`/lol-champ-select/v1/session/actions/${myAction.value.id}/complete`)
+      await window.lcu.post(`/lol-champ-select/v1/session/actions/${action.id}/complete`)
     } catch {
       // Ignore — LCU may return 500 on success
     }
@@ -210,6 +219,8 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     selectedChampId.value = 0
     assignedChampionId.value = 0
     benchChampionIds.value = []
+    pickableChampionIds.value = []
+    _myPickActions.value = []
     stopTick()
     // Keep champions cached — they don't change between sessions
   }
@@ -229,6 +240,7 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     selectedChampId,
     assignedChampionId,
     benchChampionIds,
+    pickableChampionIds,
     isMyTurn,
     canLockIn,
     handleLcuEvent,

@@ -18,28 +18,58 @@
     <div v-if="cs.loadingChampions" class="status-text">Loading champions…</div>
 
     <template v-else>
-      <!-- Assigned champion -->
-      <div v-if="assignedChampion" class="section-label">Your Champion</div>
-      <div v-if="assignedChampion" class="champ-row">
-        <button
-          class="champ-cell assigned"
-          :class="{ selected: cs.selectedChampId === assignedChampion.id }"
-          :title="assignedChampion.name"
-          @click="cs.selectedChampId = assignedChampion.id"
-        >
-          <div class="icon-wrap large">
-            <img
-              :src="`lcu://${assignedChampion.squarePortraitPath}`"
-              :alt="assignedChampion.name"
-              class="champ-icon"
-              @error="onImgError"
-            />
-          </div>
-          <span class="champ-name">{{ assignedChampion.name }}</span>
-        </button>
-      </div>
+      <!-- Pool mode: player picks from 2-3 personal options (ARAM Mayhem) -->
+      <template v-if="pickPool.length > 0">
+        <div class="section-label">Pick Your Champion</div>
+        <div class="champ-row">
+          <button
+            v-for="champ in pickPool"
+            :key="champ.id"
+            class="champ-cell pick-option"
+            :class="{ selected: cs.selectedChampId === champ.id }"
+            :title="champ.name"
+            @click="cs.hoverChampion(champ.id)"
+          >
+            <div class="icon-wrap large">
+              <img
+                :src="`lcu://${champ.squarePortraitPath}`"
+                :alt="champ.name"
+                class="champ-icon"
+                @error="onImgError"
+              />
+            </div>
+            <span class="champ-name">{{ champ.name }}</span>
+          </button>
+        </div>
+      </template>
 
-      <!-- Bench champions -->
+      <!-- Single champion mode: ARAM-assigned or standard pick -->
+      <template v-else>
+        <div v-if="assignedChampion" class="section-label">Your Champion</div>
+        <div v-if="assignedChampion" class="champ-row">
+          <button
+            class="champ-cell assigned"
+            :class="{ selected: cs.selectedChampId === assignedChampion.id }"
+            :title="assignedChampion.name"
+            @click="cs.selectedChampId = assignedChampion.id"
+          >
+            <div class="icon-wrap large">
+              <img
+                :src="`lcu://${assignedChampion.squarePortraitPath}`"
+                :alt="assignedChampion.name"
+                class="champ-icon"
+                @error="onImgError"
+              />
+            </div>
+            <span class="champ-name">{{ assignedChampion.name }}</span>
+          </button>
+        </div>
+        <div v-if="!assignedChampion && benchChampions.length === 0" class="status-text">
+          Waiting for champion assignment…
+        </div>
+      </template>
+
+      <!-- Bench champions (shared pool for swapping) -->
       <template v-if="benchChampions.length > 0">
         <div class="section-label">Bench</div>
         <div class="champ-row">
@@ -62,10 +92,6 @@
           </button>
         </div>
       </template>
-
-      <div v-if="!assignedChampion && benchChampions.length === 0" class="status-text">
-        Waiting for champion assignment…
-      </div>
     </template>
 
     <!-- Lock-in -->
@@ -96,6 +122,12 @@ function findChamp(id: number): ChampionSummary | undefined {
 
 const assignedChampion = computed(() =>
   cs.assignedChampionId > 0 ? findChamp(cs.assignedChampionId) ?? null : null
+)
+
+const pickPool = computed(() =>
+  cs.pickableChampionIds
+    .map(id => findChamp(id))
+    .filter((c): c is ChampionSummary => c !== undefined)
 )
 
 const benchChampions = computed(() =>
@@ -195,6 +227,7 @@ function onImgError(e: Event): void {
 .champ-cell:hover { background: var(--bg-4); border-color: var(--bg-4); }
 .champ-cell.selected { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--bg-3)); }
 .champ-cell.assigned { flex: 0 0 auto; }
+.champ-cell.pick-option { flex: 1 1 0; min-width: 64px; max-width: 100px; }
 
 .icon-wrap {
   width: 48px;

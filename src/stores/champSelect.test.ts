@@ -53,6 +53,30 @@ function makeSession(overrides: Partial<{
   }
 }
 
+function makePoolSession(champIds: number[], localPlayerCellId = 0): ChampSelectEventPayload {
+  return {
+    eventType: 'Update',
+    uri: '/lol-champ-select/v1/session',
+    data: {
+      localPlayerCellId,
+      actions: [[
+        ...champIds.map((championId, idx) => ({
+          id: idx + 1,
+          actorCellId: localPlayerCellId,
+          type: 'pick' as const,
+          championId,
+          completed: false,
+          isInProgress: true
+        }))
+      ]],
+      myTeam: [{ cellId: localPlayerCellId, championId: 0, championPickIntent: 0, assignedPosition: '', summonerId: 1, puuid: 'abc' }],
+      theirTeam: [],
+      timer: { adjustedTimeLeftInPhase: 30000, totalTimeInPhase: 30000, phase: 'PLANNING', isInfinite: false },
+      bans: { myTeamBans: [], theirTeamBans: [] }
+    }
+  }
+}
+
 describe('useChampSelectStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -236,5 +260,54 @@ describe('useChampSelectStore', () => {
     expect(store.champions.length).toBeGreaterThan(0)
     store.reset()
     expect(store.champions.length).toBeGreaterThan(0)
+  })
+
+  // --- Champion pool (ARAM Mayhem) ---
+
+  it('extracts pickableChampionIds from multiple pre-filled pick actions', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makePoolSession([157, 99, 64]))
+    expect(store.pickableChampionIds).toEqual([157, 99, 64])
+  })
+
+  it('pickableChampionIds is empty when only one pick action exists', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    expect(store.pickableChampionIds).toEqual([])
+  })
+
+  it('canLockIn is true in pool mode once a champion is selected', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makePoolSession([157, 99, 64]))
+    expect(store.canLockIn).toBe(false)
+    store.selectedChampId = 157
+    expect(store.canLockIn).toBe(true)
+  })
+
+  it('lockIn uses the action whose championId matches the selection in pool mode', async () => {
+    mockLcu.patch.mockResolvedValue(undefined)
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makePoolSession([157, 99, 64])) // ids 1, 2, 3
+    store.selectedChampId = 99
+    await store.lockIn()
+    expect(mockLcu.patch).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/2', { championId: 99 })
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/2/complete')
+  })
+
+  it('hoverChampion in pool mode patches the matching action', async () => {
+    mockLcu.patch.mockResolvedValue(undefined)
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makePoolSession([157, 99, 64])) // ids 1, 2, 3
+    await store.hoverChampion(64)
+    expect(store.selectedChampId).toBe(64)
+    expect(mockLcu.patch).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/3', { championId: 64 })
+  })
+
+  it('reset clears pickableChampionIds', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makePoolSession([157, 99]))
+    store.reset()
+    expect(store.pickableChampionIds).toEqual([])
   })
 })
