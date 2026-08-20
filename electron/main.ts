@@ -145,6 +145,11 @@ function startLcuWatcher(): void {
       lcuClient?.disconnect()
       lcuClient = null
       lcuCredentials = null
+      readyCheckHandled = false
+      if (readyCheckTimer) {
+        clearTimeout(readyCheckTimer)
+        readyCheckTimer = null
+      }
       setActiveClient(null, null)
       broadcastToRenderer(IPC.LCU_DISCONNECTED)
       // League closed — stop watcher and poll until League starts again
