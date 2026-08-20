@@ -29,10 +29,12 @@
         >
           <div class="icon-wrap large">
             <img
+              :key="champ.squarePortraitPath"
               :src="`lcu://${champ.squarePortraitPath}`"
               :alt="champ.name"
               class="champ-icon"
               @error="onImgError"
+              @load="onImgLoad"
             />
           </div>
           <span v-if="champ.name" class="champ-name">{{ champ.name }}</span>
@@ -48,14 +50,16 @@
           class="champ-cell assigned"
           :class="{ selected: cs.selectedChampId === assignedChampion.id }"
           :title="assignedChampion.name"
-          @click="cs.selectedChampId = assignedChampion.id"
+          @click="cs.hoverChampion(assignedChampion.id)"
         >
           <div class="icon-wrap large">
             <img
+              :key="assignedChampion.squarePortraitPath"
               :src="`lcu://${assignedChampion.squarePortraitPath}`"
               :alt="assignedChampion.name"
               class="champ-icon"
               @error="onImgError"
+              @load="onImgLoad"
             />
           </div>
           <span v-if="assignedChampion.name" class="champ-name">{{ assignedChampion.name }}</span>
@@ -79,10 +83,12 @@
         >
           <div class="icon-wrap">
             <img
+              :key="champ.squarePortraitPath"
               :src="`lcu://${champ.squarePortraitPath}`"
               :alt="champ.name"
               class="champ-icon"
               @error="onImgError"
+              @load="onImgLoad"
             />
           </div>
           <span v-if="champ.name" class="champ-name">{{ champ.name }}</span>
@@ -146,7 +152,11 @@ const selectedChampion = computed((): ChampDisplay | null =>
 )
 
 function onImgError(e: Event): void {
-  ;(e.target as HTMLImageElement).style.display = 'none'
+  ;(e.target as HTMLImageElement).style.opacity = '0'
+}
+
+function onImgLoad(e: Event): void {
+  ;(e.target as HTMLImageElement).style.opacity = '1'
 }
 </script>
 
@@ -239,7 +249,7 @@ function onImgError(e: Event): void {
   height: 48px;
   border-radius: 3px;
   overflow: hidden;
-  background: var(--bg-4);
+  background: transparent;
   flex-shrink: 0;
 }
 
