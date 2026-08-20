@@ -96,7 +96,6 @@ src/                   # Renderer process (Vue 3)
 ## Notes for Claude
 Do not be afraid to ask questions. Always make sure the developer and you (Claude) are 100 % aligned on scope.
 Implement with TDD (Test Driven Development - Testing framework is decided by Claude Code)
-Use git as version control. Use feature branches, main should ALWAYS be a functional product.
-After completing any change, run `npm run typecheck && npm test` — if both pass, commit and push immediately without waiting for manual approval.
-Do NOT merge to main without explicit developer sign-off after manual testing.
+Use git as version control. Commit and push directly to main.
+After completing any change, run `npm run typecheck && npm test` — if both pass, commit and push to main immediately without waiting for manual approval.
 Do NOT manually bump `package.json` version — CI runs `npm version patch` automatically on every push to main and publishes a GitHub release. Manual bumps with `[skip ci]` block CI and prevent releases from being published.
