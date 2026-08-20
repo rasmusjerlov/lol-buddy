@@ -15,83 +15,79 @@
       />
     </div>
 
-    <div v-if="cs.loadingChampions" class="status-text">Loading champions…</div>
+    <!-- Pool mode: player picks from 2-3 personal options (ARAM Mayhem) -->
+    <template v-if="pickPool.length > 0">
+      <div class="section-label">Pick Your Champion</div>
+      <div class="champ-row">
+        <button
+          v-for="champ in pickPool"
+          :key="champ.id"
+          class="champ-cell pick-option"
+          :class="{ selected: cs.selectedChampId === champ.id }"
+          :title="champ.name"
+          @click="cs.hoverChampion(champ.id)"
+        >
+          <div class="icon-wrap large">
+            <img
+              :src="`lcu://${champ.squarePortraitPath}`"
+              :alt="champ.name"
+              class="champ-icon"
+              @error="onImgError"
+            />
+          </div>
+          <span v-if="champ.name" class="champ-name">{{ champ.name }}</span>
+        </button>
+      </div>
+    </template>
 
+    <!-- Single champion mode: ARAM-assigned or standard pick -->
     <template v-else>
-      <!-- Pool mode: player picks from 2-3 personal options (ARAM Mayhem) -->
-      <template v-if="pickPool.length > 0">
-        <div class="section-label">Pick Your Champion</div>
-        <div class="champ-row">
-          <button
-            v-for="champ in pickPool"
-            :key="champ.id"
-            class="champ-cell pick-option"
-            :class="{ selected: cs.selectedChampId === champ.id }"
-            :title="champ.name"
-            @click="cs.hoverChampion(champ.id)"
-          >
-            <div class="icon-wrap large">
-              <img
-                :src="`lcu://${champ.squarePortraitPath}`"
-                :alt="champ.name"
-                class="champ-icon"
-                @error="onImgError"
-              />
-            </div>
-            <span class="champ-name">{{ champ.name }}</span>
-          </button>
-        </div>
-      </template>
+      <div v-if="assignedChampion" class="section-label">Your Champion</div>
+      <div v-if="assignedChampion" class="champ-row">
+        <button
+          class="champ-cell assigned"
+          :class="{ selected: cs.selectedChampId === assignedChampion.id }"
+          :title="assignedChampion.name"
+          @click="cs.selectedChampId = assignedChampion.id"
+        >
+          <div class="icon-wrap large">
+            <img
+              :src="`lcu://${assignedChampion.squarePortraitPath}`"
+              :alt="assignedChampion.name"
+              class="champ-icon"
+              @error="onImgError"
+            />
+          </div>
+          <span v-if="assignedChampion.name" class="champ-name">{{ assignedChampion.name }}</span>
+        </button>
+      </div>
+      <div v-if="!assignedChampion && benchChampions.length === 0" class="status-text">
+        Waiting for champion assignment…
+      </div>
+    </template>
 
-      <!-- Single champion mode: ARAM-assigned or standard pick -->
-      <template v-else>
-        <div v-if="assignedChampion" class="section-label">Your Champion</div>
-        <div v-if="assignedChampion" class="champ-row">
-          <button
-            class="champ-cell assigned"
-            :class="{ selected: cs.selectedChampId === assignedChampion.id }"
-            :title="assignedChampion.name"
-            @click="cs.selectedChampId = assignedChampion.id"
-          >
-            <div class="icon-wrap large">
-              <img
-                :src="`lcu://${assignedChampion.squarePortraitPath}`"
-                :alt="assignedChampion.name"
-                class="champ-icon"
-                @error="onImgError"
-              />
-            </div>
-            <span class="champ-name">{{ assignedChampion.name }}</span>
-          </button>
-        </div>
-        <div v-if="!assignedChampion && benchChampions.length === 0" class="status-text">
-          Waiting for champion assignment…
-        </div>
-      </template>
-
-      <!-- Bench champions (shared pool for swapping) -->
-      <template v-if="benchChampions.length > 0">
-        <div class="section-label">Bench</div>
-        <div class="champ-row">
-          <button
-            v-for="champ in benchChampions"
-            :key="champ.id"
-            class="champ-cell"
-            :title="champ.name"
-            @click="cs.swapBenchChamp(champ.id)"
-          >
-            <div class="icon-wrap">
-              <img
-                :src="`lcu://${champ.squarePortraitPath}`"
-                :alt="champ.name"
-                class="champ-icon"
-                @error="onImgError"
-              />
-            </div>
-            <span class="champ-name">{{ champ.name }}</span>
-          </button>
-        </div>
-      </template>
+    <!-- Bench champions (shared pool for swapping) -->
+    <template v-if="benchChampions.length > 0">
+      <div class="section-label">Bench</div>
+      <div class="champ-row">
+        <button
+          v-for="champ in benchChampions"
+          :key="champ.id"
+          class="champ-cell"
+          :title="champ.name"
+          @click="cs.swapBenchChamp(champ.id)"
+        >
+          <div class="icon-wrap">
+            <img
+              :src="`lcu://${champ.squarePortraitPath}`"
+              :alt="champ.name"
+              class="champ-icon"
+              @error="onImgError"
+            />
+          </div>
+          <span v-if="champ.name" class="champ-name">{{ champ.name }}</span>
+        </button>
+      </div>
     </template>
 
     <!-- Lock-in -->
@@ -108,7 +104,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useChampSelectStore } from '../stores/champSelect'
-import type { ChampionSummary } from '../stores/champSelect'
+
+interface ChampDisplay {
+  id: number
+  name: string
+  squarePortraitPath: string
+}
 
 const cs = useChampSelectStore()
 
@@ -116,28 +117,32 @@ const timerPercent = computed(() =>
   cs.totalTime > 0 ? (cs.timeLeft / cs.totalTime) * 100 : 0
 )
 
-function findChamp(id: number): ChampionSummary | undefined {
-  return cs.champions.find(c => c.id === id)
+// Resolve by ID; fall back to a predictable LCU icon path so icons show
+// even before the champion list has loaded.
+function resolveChamp(id: number): ChampDisplay {
+  return (
+    cs.champions.find(c => c.id === id) ?? {
+      id,
+      name: '',
+      squarePortraitPath: `/lol-game-data/assets/v1/champion-icons/${id}.png`
+    }
+  )
 }
 
-const assignedChampion = computed(() =>
-  cs.assignedChampionId > 0 ? findChamp(cs.assignedChampionId) ?? null : null
+const assignedChampion = computed((): ChampDisplay | null =>
+  cs.assignedChampionId > 0 ? resolveChamp(cs.assignedChampionId) : null
 )
 
-const pickPool = computed(() =>
-  cs.pickableChampionIds
-    .map(id => findChamp(id))
-    .filter((c): c is ChampionSummary => c !== undefined)
+const pickPool = computed((): ChampDisplay[] =>
+  cs.pickableChampionIds.map(id => resolveChamp(id))
 )
 
-const benchChampions = computed(() =>
-  cs.benchChampionIds
-    .map(id => findChamp(id))
-    .filter((c): c is ChampionSummary => c !== undefined)
+const benchChampions = computed((): ChampDisplay[] =>
+  cs.benchChampionIds.map(id => resolveChamp(id))
 )
 
-const selectedChampion = computed(() =>
-  cs.selectedChampId > 0 ? findChamp(cs.selectedChampId) ?? null : null
+const selectedChampion = computed((): ChampDisplay | null =>
+  cs.selectedChampId > 0 ? resolveChamp(cs.selectedChampId) : null
 )
 
 function onImgError(e: Event): void {

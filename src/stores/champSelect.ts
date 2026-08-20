@@ -120,7 +120,7 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     active.value = true
     localPlayerCellId.value = session.localPlayerCellId
 
-    const flatActions = session.actions.flat()
+    const flatActions = (session.actions ?? []).flat()
 
     // All non-completed pick actions that belong to the local player
     const myPicks = flatActions.filter(
@@ -153,10 +153,12 @@ export const useChampSelectStore = defineStore('champSelect', () => {
       .filter(id => id > 0)
 
     const t = session.timer
-    phase.value = t.phase
-    if (!t.isInfinite) {
-      startTick(t.adjustedTimeLeftInPhase / 1000)
-      totalTime.value = t.totalTimeInPhase / 1000
+    if (t) {
+      phase.value = t.phase ?? ''
+      if (!t.isInfinite) {
+        startTick(t.adjustedTimeLeftInPhase / 1000)
+        totalTime.value = t.totalTimeInPhase / 1000
+      }
     }
 
     myTeam.value = session.myTeam ?? []
