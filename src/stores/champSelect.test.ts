@@ -348,7 +348,7 @@ describe('useChampSelectStore', () => {
     const store = useChampSelectStore()
     store.handleLcuEvent(makeSession({ trades: [{ id: 5, cellId: 2, state: 'AVAILABLE' }] }))
     await store.requestTrade(5)
-    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/trades/5/request')
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/trades/5')
   })
 
   it('acceptTrade POSTs to accept endpoint', async () => {

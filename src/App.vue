@@ -63,6 +63,7 @@ onMounted(async () => {
     connection.onConnected(info)
     lobby.loadFriends()
     chat.loadConversations()
+    champSelect.loadChampions()
     try {
       const readyCheck = await window.lcu.get<{ state: string; timer: number; playerResponse: string }>('/lol-matchmaking/v1/ready-check')
       if (readyCheck && (readyCheck as { state: string }).state === 'InProgress') {
@@ -134,6 +135,7 @@ onMounted(async () => {
     await connection.onConnected({ port: status.port })
     lobby.loadFriends()
     chat.loadConversations()
+    champSelect.loadChampions()
     try {
       const readyCheck = await window.lcu.get<{ state: string; timer: number; playerResponse: string }>('/lol-matchmaking/v1/ready-check')
       if (readyCheck && (readyCheck as { state: string }).state === 'InProgress') {

@@ -133,9 +133,6 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     const session = payload.data
     if (!session) return
 
-    // Debug: log raw session so we can inspect the actual LCU structure
-    console.debug('[champSelect] session:', JSON.stringify(session, null, 2))
-
     active.value = true
     localPlayerCellId.value = session.localPlayerCellId
 
@@ -225,7 +222,7 @@ export const useChampSelectStore = defineStore('champSelect', () => {
 
   async function requestTrade(tradeId: number): Promise<void> {
     try {
-      await window.lcu.post(`/lol-champ-select/v1/session/trades/${tradeId}/request`)
+      await window.lcu.post(`/lol-champ-select/v1/session/trades/${tradeId}`)
     } catch { /* Trade may no longer be available */ }
   }
 
