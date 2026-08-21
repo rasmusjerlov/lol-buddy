@@ -59,10 +59,30 @@ let unsubEvent: (() => void) | null = null
 onMounted(async () => {
   updateInfo.value = await window.updater.checkForUpdate()
 
-  unsubConnected = window.lcu.onConnected((info) => {
+  unsubConnected = window.lcu.onConnected(async (info) => {
     connection.onConnected(info)
     lobby.loadFriends()
     chat.loadConversations()
+    try {
+      const readyCheck = await window.lcu.get<{ state: string; timer: number; playerResponse: string }>('/lol-matchmaking/v1/ready-check')
+      if (readyCheck && (readyCheck as { state: string }).state === 'InProgress') {
+        mm.handleLcuEvent({
+          data: readyCheck as Parameters<typeof mm.handleLcuEvent>[0]['data'],
+          eventType: 'Update',
+          uri: '/lol-matchmaking/v1/ready-check'
+        })
+      }
+    } catch { /* no active ready-check */ }
+    try {
+      const csSession = await window.lcu.get('/lol-champ-select/v1/session')
+      if (csSession) {
+        champSelect.handleLcuEvent({
+          data: csSession as ChampSelectEventPayload['data'],
+          eventType: 'Update',
+          uri: '/lol-champ-select/v1/session'
+        })
+      }
+    } catch { /* not in champ select */ }
   })
 
   unsubDisconnected = window.lcu.onDisconnected(() => {

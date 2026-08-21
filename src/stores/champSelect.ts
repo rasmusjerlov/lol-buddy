@@ -19,6 +19,12 @@ export interface ChampSelectTeamMember {
   puuid: string
 }
 
+export interface ChampSelectTrade {
+  id: number
+  cellId: number
+  state: 'AVAILABLE' | 'BUSY' | 'INVALID' | 'RECEIVED' | 'SENT'
+}
+
 export interface ChampSelectSession {
   actions: ChampSelectAction[][]
   localPlayerCellId: number
@@ -33,6 +39,7 @@ export interface ChampSelectSession {
   bans: { myTeamBans: number[]; theirTeamBans: number[] }
   benchChampions?: Array<{ championId: number; isPriority: boolean }>
   benchEnabled?: boolean
+  trades?: ChampSelectTrade[]
 }
 
 export interface ChampionSummary {
@@ -66,8 +73,11 @@ export const useChampSelectStore = defineStore('champSelect', () => {
   const benchChampionIds = ref<number[]>([])
   const pickableChampionIds = ref<number[]>([])
   const _myPickActions = ref<ChampSelectAction[]>([])
+  const trades = ref<ChampSelectTrade[]>([])
+  const allPickableChampIds = ref<number[]>([])
 
   let tickInterval: ReturnType<typeof setInterval> | null = null
+  let pickableIdsLoaded = false
 
   const isMyTurn = computed(() => myAction.value?.isInProgress === true)
 
@@ -105,6 +115,15 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     }
   }
 
+  async function loadPickableChampIds(): Promise<void> {
+    try {
+      const ids = await window.lcu.get<number[]>('/lol-champ-select/v1/pickable-champion-ids')
+      allPickableChampIds.value = ids ?? []
+    } catch {
+      allPickableChampIds.value = []
+    }
+  }
+
   function handleLcuEvent(payload: ChampSelectEventPayload): void {
     if (payload.eventType === 'Delete') {
       reset()
@@ -119,6 +138,13 @@ export const useChampSelectStore = defineStore('champSelect', () => {
 
     active.value = true
     localPlayerCellId.value = session.localPlayerCellId
+
+    trades.value = (session.trades ?? []).filter(t => t.state !== 'INVALID')
+
+    if (!pickableIdsLoaded) {
+      pickableIdsLoaded = true
+      loadPickableChampIds()
+    }
 
     const flatActions = (session.actions ?? []).flat()
 
@@ -197,6 +223,24 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     }
   }
 
+  async function requestTrade(tradeId: number): Promise<void> {
+    try {
+      await window.lcu.post(`/lol-champ-select/v1/session/trades/${tradeId}/request`)
+    } catch { /* Trade may no longer be available */ }
+  }
+
+  async function acceptTrade(tradeId: number): Promise<void> {
+    try {
+      await window.lcu.post(`/lol-champ-select/v1/session/trades/${tradeId}/accept`)
+    } catch { }
+  }
+
+  async function declineTrade(tradeId: number): Promise<void> {
+    try {
+      await window.lcu.post(`/lol-champ-select/v1/session/trades/${tradeId}/decline`)
+    } catch { }
+  }
+
   async function lockIn(): Promise<void> {
     if (selectedChampId.value === 0) return
     const action = _myPickActions.value.find((a) => a.championId === selectedChampId.value) ?? myAction.value
@@ -226,6 +270,9 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     benchChampionIds.value = []
     pickableChampionIds.value = []
     _myPickActions.value = []
+    trades.value = []
+    allPickableChampIds.value = []
+    pickableIdsLoaded = false
     stopTick()
     // Keep champions cached — they don't change between sessions
   }
@@ -246,12 +293,17 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     assignedChampionId,
     benchChampionIds,
     pickableChampionIds,
+    trades,
+    allPickableChampIds,
     isMyTurn,
     canLockIn,
     handleLcuEvent,
     hoverChampion,
     swapBenchChamp,
     lockIn,
+    requestTrade,
+    acceptTrade,
+    declineTrade,
     loadChampions,
     reset
   }

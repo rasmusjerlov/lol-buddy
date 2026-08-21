@@ -141,6 +141,30 @@ function startLcuWatcher(): void {
       })
 
       broadcastToRenderer(IPC.LCU_CONNECTED, { port: event.credentials.port })
+
+      // Poll for in-flight state that may have started before the WS connection was ready.
+      // Broadcasts synthetic events so the renderer catches up regardless of startup timing.
+      try {
+        const rc = await lcuClient!.get<{ state: string }>('/lol-matchmaking/v1/ready-check')
+        if (rc?.state === 'InProgress' && !readyCheckHandled) {
+          readyCheckHandled = true
+          handleReadyCheck()
+        }
+        broadcastToRenderer(IPC.LCU_EVENT, {
+          eventName: LCU_EVENTS.READY_CHECK,
+          data: { data: rc, eventType: 'Update', uri: '/lol-matchmaking/v1/ready-check' }
+        })
+      } catch { /* no active ready-check */ }
+
+      try {
+        const cs = await lcuClient!.get<unknown>('/lol-champ-select/v1/session')
+        if (cs) {
+          broadcastToRenderer(IPC.LCU_EVENT, {
+            eventName: LCU_EVENTS.CHAMP_SELECT,
+            data: { data: cs, eventType: 'Update', uri: '/lol-champ-select/v1/session' }
+          })
+        }
+      } catch { /* not in champ select */ }
     } else {
       lcuClient?.disconnect()
       lcuClient = null

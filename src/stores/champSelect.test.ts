@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useChampSelectStore } from './champSelect'
-import type { ChampSelectEventPayload } from './champSelect'
+import type { ChampSelectEventPayload, ChampSelectTrade } from './champSelect'
 
 const mockLcu = {
   get: vi.fn(),
@@ -26,6 +26,7 @@ function makeSession(overrides: Partial<{
   selectedChampId: number
   assignedChampionId: number
   benchChampions: Array<{ championId: number; isPriority: boolean }>
+  trades: ChampSelectTrade[]
 }> = {}): ChampSelectEventPayload {
   const localCell = overrides.localPlayerCellId ?? 0
   const inProgressCell = overrides.inProgressCellId ?? localCell
@@ -48,7 +49,8 @@ function makeSession(overrides: Partial<{
       theirTeam: [],
       timer: { adjustedTimeLeftInPhase: 30000, totalTimeInPhase: 30000, phase: overrides.phase ?? 'BAN_PICK', isInfinite: false },
       bans: { myTeamBans: [], theirTeamBans: [] },
-      benchChampions: overrides.benchChampions
+      benchChampions: overrides.benchChampions,
+      trades: overrides.trades
     }
   }
 }
@@ -309,5 +311,98 @@ describe('useChampSelectStore', () => {
     store.handleLcuEvent(makePoolSession([157, 99]))
     store.reset()
     expect(store.pickableChampionIds).toEqual([])
+  })
+
+  // --- Trades ---
+
+  it('parses available trades from session', () => {
+    const store = useChampSelectStore()
+    const trades: ChampSelectTrade[] = [
+      { id: 1, cellId: 1, state: 'AVAILABLE' },
+      { id: 2, cellId: 2, state: 'AVAILABLE' }
+    ]
+    store.handleLcuEvent(makeSession({ trades }))
+    expect(store.trades).toEqual(trades)
+  })
+
+  it('filters out INVALID trades', () => {
+    const store = useChampSelectStore()
+    const trades: ChampSelectTrade[] = [
+      { id: 1, cellId: 1, state: 'AVAILABLE' },
+      { id: 2, cellId: 2, state: 'INVALID' }
+    ]
+    store.handleLcuEvent(makeSession({ trades }))
+    expect(store.trades).toHaveLength(1)
+    expect(store.trades[0].cellId).toBe(1)
+  })
+
+  it('reset clears trades', () => {
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ trades: [{ id: 1, cellId: 1, state: 'AVAILABLE' }] }))
+    store.reset()
+    expect(store.trades).toEqual([])
+  })
+
+  it('requestTrade POSTs to request endpoint', async () => {
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ trades: [{ id: 5, cellId: 2, state: 'AVAILABLE' }] }))
+    await store.requestTrade(5)
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/trades/5/request')
+  })
+
+  it('acceptTrade POSTs to accept endpoint', async () => {
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ trades: [{ id: 3, cellId: 1, state: 'RECEIVED' }] }))
+    await store.acceptTrade(3)
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/trades/3/accept')
+  })
+
+  it('declineTrade POSTs to decline endpoint', async () => {
+    mockLcu.post.mockResolvedValue(undefined)
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ trades: [{ id: 3, cellId: 1, state: 'RECEIVED' }] }))
+    await store.declineTrade(3)
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/trades/3/decline')
+  })
+
+  it('loads pickable champion IDs on first session event', async () => {
+    mockLcu.get.mockImplementation((path: string) => {
+      if (path === '/lol-champ-select/v1/pickable-champion-ids') return Promise.resolve([1, 2, 3])
+      return Promise.resolve([])
+    })
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession())
+    await vi.runAllTimersAsync()
+    expect(store.allPickableChampIds).toEqual([1, 2, 3])
+  })
+
+  it('does not reload pickable champion IDs on subsequent session events', async () => {
+    mockLcu.get.mockResolvedValue([1, 2, 3])
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession())
+    store.handleLcuEvent(makeSession())
+    await vi.runAllTimersAsync()
+    const pickableCalls = (mockLcu.get as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c: unknown[]) => c[0] === '/lol-champ-select/v1/pickable-champion-ids'
+    )
+    expect(pickableCalls).toHaveLength(1)
+  })
+
+  it('reset clears allPickableChampIds and allows reloading', async () => {
+    mockLcu.get.mockResolvedValue([1, 2])
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession())
+    await vi.runAllTimersAsync()
+    store.reset()
+    expect(store.allPickableChampIds).toEqual([])
+    // Next session should re-load
+    store.handleLcuEvent(makeSession())
+    await vi.runAllTimersAsync()
+    const pickableCalls = (mockLcu.get as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (c: unknown[]) => c[0] === '/lol-champ-select/v1/pickable-champion-ids'
+    )
+    expect(pickableCalls).toHaveLength(2)
   })
 })
