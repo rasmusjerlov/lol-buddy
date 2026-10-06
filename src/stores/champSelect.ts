@@ -106,7 +106,7 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     if (champions.value.length > 0 || loadingChampions.value) return
     loadingChampions.value = true
     try {
-      const list = await window.lcu.get<ChampionSummary[]>('/lol-game-data/assets/v1/champion-summary')
+      const list = await window.lcu.get<ChampionSummary[]>('/lol-game-data/assets/v1/champion-summary.json')
       champions.value = list.filter((c) => c.id > 0).sort((a, b) => a.name.localeCompare(b.name))
     } catch {
       // Will retry on next champ select

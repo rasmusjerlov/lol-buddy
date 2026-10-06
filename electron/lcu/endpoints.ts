@@ -11,7 +11,7 @@ export const LCU = {
   CHAT_ME: '/lol-chat/v1/me',
   LOBBY_MATCHMAKING_SEARCH: '/lol-lobby/v2/lobby/matchmaking/search',
   CHAMP_SELECT_SESSION: '/lol-champ-select/v1/session',
-  CHAMPION_SUMMARY: '/lol-game-data/assets/v1/champion-summary'
+  CHAMPION_SUMMARY: '/lol-game-data/assets/v1/champion-summary.json'
 } as const
 
 export const LCU_EVENTS = {
