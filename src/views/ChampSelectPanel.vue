@@ -131,14 +131,20 @@
       </div>
     </template>
 
-    <!-- Lock-in -->
+    <!-- Lock-in: only applies to turn-based pick/ban or pool mode. Classic ARAM has
+         no lock-in action — the assigned/benched/traded champion finalizes
+         automatically when the timer runs out. -->
     <button
+      v-if="cs.isMyTurn || cs.pickableChampionIds.length > 0"
       class="lock-btn"
       :disabled="!cs.canLockIn"
       @click="cs.lockIn()"
     >
       Lock In{{ selectedChampion ? ` — ${selectedChampion.name}` : '' }}
     </button>
+    <div v-else-if="benchChampions.length > 0" class="status-text">
+      Champion locks in automatically when the timer ends
+    </div>
 
     <!-- Teammates + trade requests -->
     <template v-if="teammates.length > 0">
@@ -248,8 +254,21 @@ const teammates = computed((): TeammateDisplay[] =>
     })
 )
 
+const MAX_IMG_RETRIES = 3
+
 function onImgError(e: Event): void {
-  ;(e.target as HTMLImageElement).style.opacity = '0'
+  const img = e.target as HTMLImageElement
+  const retries = Number(img.dataset.retries ?? '0')
+  if (retries >= MAX_IMG_RETRIES) {
+    img.style.opacity = '0'
+    return
+  }
+  img.dataset.retries = String(retries + 1)
+  const src = img.src
+  setTimeout(() => {
+    img.src = ''
+    img.src = src
+  }, 400 * (retries + 1))
 }
 
 function onImgLoad(e: Event): void {
