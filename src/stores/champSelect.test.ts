@@ -55,28 +55,13 @@ function makeSession(overrides: Partial<{
   }
 }
 
-function makePoolSession(champIds: number[], localPlayerCellId = 0): ChampSelectEventPayload {
-  return {
-    eventType: 'Update',
-    uri: '/lol-champ-select/v1/session',
-    data: {
-      localPlayerCellId,
-      actions: [[
-        ...champIds.map((championId, idx) => ({
-          id: idx + 1,
-          actorCellId: localPlayerCellId,
-          type: 'pick' as const,
-          championId,
-          completed: false,
-          isInProgress: true
-        }))
-      ]],
-      myTeam: [{ cellId: localPlayerCellId, championId: 0, championPickIntent: 0, assignedPosition: '', summonerId: 1, puuid: 'abc' }],
-      theirTeam: [],
-      timer: { adjustedTimeLeftInPhase: 30000, totalTimeInPhase: 30000, phase: 'PLANNING', isInfinite: false },
-      bans: { myTeamBans: [], theirTeamBans: [] }
-    }
-  }
+const SUBSET_PATH = '/lol-lobby-team-builder/champ-select/v1/subset-champion-list'
+
+function mockSubsetChampionIds(ids: number[]): void {
+  mockLcu.get.mockImplementation((path: string) => {
+    if (path === SUBSET_PATH) return Promise.resolve(ids)
+    return Promise.resolve([])
+  })
 }
 
 describe('useChampSelectStore', () => {
@@ -265,50 +250,74 @@ describe('useChampSelectStore', () => {
   })
 
   // --- Champion pool (ARAM Mayhem) ---
+  // The 2-3 opening-pick choices come from a separate team-builder endpoint, not the
+  // actions array — it only answers while the local player has no champion assigned yet.
 
-  it('extracts pickableChampionIds from multiple pre-filled pick actions', () => {
+  it('extracts pickableChampionIds from the subset-champion-list endpoint during the opening pick', async () => {
+    mockSubsetChampionIds([157, 99, 64])
     const store = useChampSelectStore()
-    store.handleLcuEvent(makePoolSession([157, 99, 64]))
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    await vi.runAllTimersAsync()
     expect(store.pickableChampionIds).toEqual([157, 99, 64])
   })
 
-  it('pickableChampionIds is empty when only one pick action exists', () => {
+  it('pickableChampionIds stays empty once the local player has a champion assigned', async () => {
+    mockSubsetChampionIds([157, 99, 64])
     const store = useChampSelectStore()
-    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0, assignedChampionId: 157 }))
+    await vi.runAllTimersAsync()
     expect(store.pickableChampionIds).toEqual([])
   })
 
-  it('canLockIn is true in pool mode once a champion is selected', () => {
+  it('clears pickableChampionIds once a champion gets assigned after the opening pick', async () => {
+    mockSubsetChampionIds([157, 99, 64])
     const store = useChampSelectStore()
-    store.handleLcuEvent(makePoolSession([157, 99, 64]))
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    await vi.runAllTimersAsync()
+    expect(store.pickableChampionIds).toEqual([157, 99, 64])
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0, assignedChampionId: 99 }))
+    expect(store.pickableChampionIds).toEqual([])
+  })
+
+  it('canLockIn is true in pool mode once a champion is selected', async () => {
+    mockSubsetChampionIds([157, 99, 64])
+    const store = useChampSelectStore()
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    await vi.runAllTimersAsync()
     expect(store.canLockIn).toBe(false)
     store.selectedChampId = 157
     expect(store.canLockIn).toBe(true)
   })
 
-  it('lockIn uses the action whose championId matches the selection in pool mode', async () => {
+  it('lockIn patches the local player action with the selected pool champion', async () => {
+    mockSubsetChampionIds([157, 99, 64])
     mockLcu.patch.mockResolvedValue(undefined)
     mockLcu.post.mockResolvedValue(undefined)
     const store = useChampSelectStore()
-    store.handleLcuEvent(makePoolSession([157, 99, 64])) // ids 1, 2, 3
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    await vi.runAllTimersAsync()
     store.selectedChampId = 99
     await store.lockIn()
-    expect(mockLcu.patch).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/2', { championId: 99 })
-    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/2/complete')
+    expect(mockLcu.patch).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/1', { championId: 99 })
+    expect(mockLcu.post).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/1/complete')
   })
 
-  it('hoverChampion in pool mode patches the matching action', async () => {
+  it('hoverChampion in pool mode patches the local player action', async () => {
+    mockSubsetChampionIds([157, 99, 64])
     mockLcu.patch.mockResolvedValue(undefined)
     const store = useChampSelectStore()
-    store.handleLcuEvent(makePoolSession([157, 99, 64])) // ids 1, 2, 3
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    await vi.runAllTimersAsync()
     await store.hoverChampion(64)
     expect(store.selectedChampId).toBe(64)
-    expect(mockLcu.patch).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/3', { championId: 64 })
+    expect(mockLcu.patch).toHaveBeenCalledWith('/lol-champ-select/v1/session/actions/1', { championId: 64 })
   })
 
-  it('reset clears pickableChampionIds', () => {
+  it('reset clears pickableChampionIds', async () => {
+    mockSubsetChampionIds([157, 99])
     const store = useChampSelectStore()
-    store.handleLcuEvent(makePoolSession([157, 99]))
+    store.handleLcuEvent(makeSession({ localPlayerCellId: 0, inProgressCellId: 0 }))
+    await vi.runAllTimersAsync()
     store.reset()
     expect(store.pickableChampionIds).toEqual([])
   })

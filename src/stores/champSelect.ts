@@ -78,6 +78,7 @@ export const useChampSelectStore = defineStore('champSelect', () => {
 
   let tickInterval: ReturnType<typeof setInterval> | null = null
   let pickableIdsLoaded = false
+  let subsetChampsRequested = false
 
   const isMyTurn = computed(() => myAction.value?.isInProgress === true)
 
@@ -124,6 +125,21 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     }
   }
 
+  // ARAM Mayhem's opening pick offers 2-3 champion choices. These do NOT come from the
+  // actions array — they come from a separate team-builder endpoint that only answers
+  // during the opening pick and 404s once the local player has a champion assigned.
+  async function loadSubsetChampionIds(): Promise<void> {
+    try {
+      const body = await window.lcu.get<number[] | { subsetChampionIds: number[] }>(
+        '/lol-lobby-team-builder/champ-select/v1/subset-champion-list'
+      )
+      const ids = Array.isArray(body) ? body : Array.isArray(body?.subsetChampionIds) ? body.subsetChampionIds : []
+      pickableChampionIds.value = ids.filter((id) => id > 0)
+    } catch {
+      pickableChampionIds.value = []
+    }
+  }
+
   function handleLcuEvent(payload: ChampSelectEventPayload): void {
     if (payload.eventType === 'Delete') {
       reset()
@@ -155,15 +171,24 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     myAction.value =
       myPicks.find((a) => a.isInProgress) ?? myPicks[0] ?? null
 
-    // Personal champion pool: when multiple pick actions each carry a pre-filled champion ID
-    // (e.g. ARAM Mayhem gives each player 2-3 options to choose from).
-    const poolIds = myPicks.map((a) => a.championId).filter((id) => id > 0)
-    pickableChampionIds.value = poolIds.length > 1 ? poolIds : []
+    const localMember = (session.myTeam ?? []).find(m => m.cellId === session.localPlayerCellId)
+
+    // ARAM Mayhem's opening pick: offer the subset champion pool until the local player
+    // has a champion assigned, then clear it so the UI moves on to the bench/trade view.
+    const isPicking = (session.timer?.phase ?? '') === 'BAN_PICK' && (localMember?.championId ?? 0) === 0
+    if (isPicking) {
+      if (!subsetChampsRequested) {
+        subsetChampsRequested = true
+        loadSubsetChampionIds()
+      }
+    } else {
+      subsetChampsRequested = false
+      if (pickableChampionIds.value.length > 0) pickableChampionIds.value = []
+    }
 
     // Sync selected champ from LCU state if user hasn't made a choice yet.
     // In ARAM the assigned champion lives in myTeam, not in the action.
     // In pool mode the action's championId is an option (not an assignment), so skip it.
-    const localMember = (session.myTeam ?? []).find(m => m.cellId === session.localPlayerCellId)
     const isPoolMode = pickableChampionIds.value.length > 1
     const assignedId = localMember?.championId || (!isPoolMode ? myAction.value?.championId : 0) || 0
     if (assignedId !== 0) {
@@ -270,6 +295,7 @@ export const useChampSelectStore = defineStore('champSelect', () => {
     trades.value = []
     allPickableChampIds.value = []
     pickableIdsLoaded = false
+    subsetChampsRequested = false
     stopTick()
     // Keep champions cached — they don't change between sessions
   }
