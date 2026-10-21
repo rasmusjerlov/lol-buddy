@@ -98,6 +98,7 @@ export class LcuClient {
     })
 
     ws.on('open', () => {
+      console.log('[auto-accept-debug] WS open, re-subscribing to', [...this.subscriptions.keys()])
       // Re-subscribe to all registered events after reconnect
       for (const eventName of this.subscriptions.keys()) {
         ws.send(JSON.stringify([5, eventName]))
@@ -110,14 +111,18 @@ export class LcuClient {
         // LCU WS messages: [opcode, eventName, eventData]
         if (!Array.isArray(payload) || payload.length < 3) return
         const [, eventName, eventData] = payload
+        if (eventName === 'OnJsonApiEvent_lol-matchmaking_v1_ready-check') {
+          console.log('[auto-accept-debug] WS message for ready-check:', JSON.stringify(eventData))
+        }
         const handlers = this.subscriptions.get(eventName)
         handlers?.forEach((h) => h(eventData))
-      } catch {
-        // Ignore malformed messages
+      } catch (err) {
+        console.log('[auto-accept-debug] WS message parse error:', err)
       }
     })
 
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
+      console.log('[auto-accept-debug] WS closed', code, reason?.toString())
       this.ws = null
       // Reconnect after 2s if there are still subscriptions
       if (this.subscriptions.size > 0) {
@@ -125,7 +130,8 @@ export class LcuClient {
       }
     })
 
-    ws.on('error', () => {
+    ws.on('error', (err) => {
+      console.log('[auto-accept-debug] WS error:', err)
       // 'close' will fire after error; let it handle reconnect
     })
 

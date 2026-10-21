@@ -60,6 +60,8 @@ function createWindow(): BrowserWindow {
 }
 
 async function handleReadyCheck(): Promise<void> {
+  console.log('[auto-accept-debug] handleReadyCheck fired, autoAccept =', getSetting('autoAccept'), 'lcuClient =', !!lcuClient)
+
   BrowserWindow.getAllWindows().forEach((win) => {
     if (win.isMinimized()) win.restore()
     win.show()
@@ -76,13 +78,18 @@ async function handleReadyCheck(): Promise<void> {
 
   if (getSetting('autoAccept') && lcuClient) {
     const delayMs = getSetting('autoAcceptDelay') * 1000
+    console.log('[auto-accept-debug] scheduling accept, delayMs =', delayMs)
     const doAccept = async (): Promise<void> => {
       readyCheckTimer = null
-      if (!readyCheckHandled || !lcuClient) return
+      if (!readyCheckHandled || !lcuClient) {
+        console.log('[auto-accept-debug] doAccept bailed, readyCheckHandled =', readyCheckHandled, 'lcuClient =', !!lcuClient)
+        return
+      }
       try {
         await lcuClient.post('/lol-matchmaking/v1/ready-check/accept')
-      } catch {
-        // Already accepted, timed out, or not in ready-check — ignore
+        console.log('[auto-accept-debug] accept POST succeeded')
+      } catch (err) {
+        console.log('[auto-accept-debug] accept POST threw (may still have succeeded):', err)
       }
     }
     if (delayMs > 0) {
@@ -111,6 +118,7 @@ async function startDiscovery(): Promise<void> {
 
 function startLcuWatcher(): void {
   lockfileWatcher.on(async (event) => {
+    console.log('[auto-accept-debug] lockfile event:', event.type)
     if (event.type === 'connected') {
       lcuClient?.disconnect()
       lcuClient = new LcuClient(event.credentials)
@@ -124,6 +132,7 @@ function startLcuWatcher(): void {
 
           if (eventName === LCU_EVENTS.READY_CHECK) {
             const ev = data as { data?: { state?: string } }
+            console.log('[auto-accept-debug] subscribe callback: state =', ev?.data?.state, 'readyCheckHandled =', readyCheckHandled)
             if (ev?.data?.state === 'InProgress') {
               if (!readyCheckHandled) {
                 readyCheckHandled = true
